@@ -1,6 +1,6 @@
 # desafio-backend
 
-Serviço de notificações (desafio técnico back-end Pleno — Go, Gin, PostgreSQL, Redis, WebSocket). Este repositório ainda contém a estrutura de projeto e configuração do Cursor; a implementação da aplicação será adicionada em commits seguintes.
+Serviço de notificações (desafio técnico back-end Pleno — Go, Gin, PostgreSQL, Redis, WebSocket). A implementação da aplicação será adicionada em commits seguintes. A pasta `.cursor/` (regras, agentes, MCP) permanece **só na tua máquina**; não entra no Git.
 
 ## Requisitos locais (Windows 11)
 
@@ -15,12 +15,12 @@ Confirmação: `go version`, `just --version`, `docker --version`.
 ## Estrutura
 
 - [desafio-backend.code-workspace](desafio-backend.code-workspace) — workspace do VS Code/Cursor
-- [.cursor/](.cursor/) — regras, agentes, skills, `repos/app.yaml` e [mcp.json](.cursor/mcp.json)
 - `tasks/` — planos e documentos de pipeline (refino, code, review, QA), quando usados
+- **Local (não versionado):** pasta `.cursor/` com regras, agentes, `repos/app.yaml`, `mcp.json` e `skills/`, se usares; está em [.gitignore](.gitignore)
 
 ## Cursor e MCP
 
-O ficheiro [.cursor/mcp.json](.cursor/mcp.json) regista o servidor **team-memory** (`npx @arvoretech/memory-mcp`). Requer **Node.js** (para `npx`) se quiseres este MCP ativo. Os embeddings usam a pasta local `./memories` (ver [.gitignore](.gitignore)).
+Se tiveres `.cursor/mcp.json` localmente, podes configurar o **team-memory** (`npx @arvoretech/memory-mcp`). Requer **Node.js** (para `npx`) se quiseres este MCP ativo. Os embeddings usam a pasta local `./memories` (ignorada no Git, ver [.gitignore](.gitignore)).
 
 ## Como clonar e desenvolver (após o código existir)
 
@@ -28,7 +28,7 @@ Instruções detalhadas (`just`, `docker compose up`, variáveis de ambiente) se
 
 ## Git e GitHub
 
-Já existem **dois commits** em `main` (configuração Cursor; `.gitignore`, `tasks/`, README).
+O histórico em `main` inclui workspace, `.gitignore`, `tasks/` e README (sem `.cursor/` no remoto).
 
 **Publicar no GitHub como privado** (só após autenticar a CLI; na primeira vez é interativo):
 
