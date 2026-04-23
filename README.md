@@ -28,12 +28,16 @@ Instruções detalhadas (`just`, `docker compose up`, variáveis de ambiente) se
 
 ## Git e GitHub
 
-O histórico inicial mostra: configuração Cursor, `.gitignore`, e este README.
+Já existem **dois commits** em `main` (configuração Cursor; `.gitignore`, `tasks/`, README).
 
-Comando sugerido para repo privado (GitHub CLI autenticado: `gh auth login`):
+**Publicar no GitHub como privado** (só após autenticar a CLI; na primeira vez é interativo):
+
+1. `winget install GitHub.cli` (se `gh` não existir)
+2. `gh auth login` — seguir o assistente (HTTPS ou SSH, escopo para o teu utilizador)
+3. Na raiz do projeto:
 
 ```text
 gh repo create desafio-backend --private --source=. --remote=origin --push
 ```
 
-(ajusta o nome do repositório se necessário)
+Se preferires criar o repositório vazio no site do GitHub: `git remote add origin <url-ssh-ou-https>` e `git push -u origin main`.
