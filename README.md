@@ -41,3 +41,5 @@ gh repo create desafio-backend --private --source=. --remote=origin --push
 ```
 
 Se preferires criar o repositório vazio no site do GitHub: `git remote add origin <url-ssh-ou-https>` e `git push -u origin main`.
+
+Se já tivesses feito `push` antes de reescrever o histórico, o próximo envio tem de ser `git push --force-with-lease` (reescreveste commits).
