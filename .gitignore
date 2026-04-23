@@ -1,0 +1,39 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+/dist/
+
+# Go
+/vendor/
+/coverage.out
+/coverage.html
+go.work
+go.work.sum
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Cursor MCP local memories (optional)
+/memories/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Debug
+__debug_bin*
