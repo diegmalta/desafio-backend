@@ -25,6 +25,9 @@ go.work.sum
 # Cursor MCP local memories (optional)
 /memories/
 
+# Cursor (local; not versioned)
+.cursor/
+
 # IDEs
 .idea/
 .vscode/
