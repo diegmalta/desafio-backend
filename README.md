@@ -1,6 +1,8 @@
 # desafio-backend
 
-Serviço de notificações (desafio técnico back-end Pleno — Go, Gin, PostgreSQL, Redis, WebSocket). A implementação da aplicação será adicionada em commits seguintes. A pasta `.cursor/` (regras, agentes, MCP) permanece **só na tua máquina**; não entra no Git.
+Serviço de notificações (desafio técnico back-end Pleno — Go, Gin, PostgreSQL, Redis, WebSocket). A implementação da aplicação será adicionada em commits seguintes.
+
+Ficheiros **não** versionados no Git deste repositório: [`.gitignore`](.gitignore) inclui **`.cursor/`** e qualquer `tasks/` acidental dentro do clone. Os planos e artefatos de agentes ficam em **`E:\Codigos\desafio-tasks\`** (mesmo workspace; ver [desafio-backend.code-workspace](desafio-backend.code-workspace)).
 
 ## Requisitos locais (Windows 11)
 
@@ -14,32 +16,27 @@ Confirmação: `go version`, `just --version`, `docker --version`.
 
 ## Estrutura
 
-- [desafio-backend.code-workspace](desafio-backend.code-workspace) — workspace do VS Code/Cursor
-- `tasks/` — planos e documentos de pipeline (refino, code, review, QA), quando usados
-- **Local (não versionado):** pasta `.cursor/` com regras, agentes, `repos/app.yaml`, `mcp.json` e `skills/`, se usares; está em [.gitignore](.gitignore)
+- [desafio-backend.code-workspace](desafio-backend.code-workspace) — abre **duas raízes** no Cursor/VS Code: este repositório e a pasta irmã **desafio-tasks** (planos, refinamentos, saídas dos agentes; **fora** do remoto)
+- Código e config da app: repositório `desafio-backend` (Git)
 
 ## Cursor e MCP
 
-Se tiveres `.cursor/mcp.json` localmente, podes configurar o **team-memory** (`npx @arvoretech/memory-mcp`). Requer **Node.js** (para `npx`) se quiseres este MCP ativo. Os embeddings usam a pasta local `./memories` (ignorada no Git, ver [.gitignore](.gitignore)).
+Se tiveres `desafio-backend/.cursor/mcp.json` (local, não no remoto se ignorado), podes configurar o **team-memory** (`npx @arvoretech/memory-mcp`). Requer **Node.js** (para `npx`). A pasta local `./memories` pode ser ignorada no Git (ver [.gitignore](.gitignore)).
 
 ## Como clonar e desenvolver (após o código existir)
 
-Instruções detalhadas (`just`, `docker compose up`, variáveis de ambiente) serão documentadas quando a aplicação e o `Justfile` estiverem no repositório.
+Cria a pasta irmã ao lado do clone, por exemplo: `..\desafio-tasks\` (já referenciada no ficheiro `.code-workspace`). Instruções de `just` e `docker compose` entram com a implementação.
 
 ## Git e GitHub
 
-O histórico em `main` inclui workspace, `.gitignore`, `tasks/` e README (sem `.cursor/` no remoto).
+O histórico em `main` contém ficheiros do repositório de aplicação (p.ex. `desafio-backend.code-workspace`, `.gitignore`, `README`); **não** inclui `.cursor/`, `tasks/` dentro do repo, nem o conteúdo de `desafio-tasks/`.
 
-**Publicar no GitHub como privado** (só após autenticar a CLI; na primeira vez é interativo):
-
-1. `winget install GitHub.cli` (se `gh` não existir)
-2. `gh auth login` — seguir o assistente (HTTPS ou SSH, escopo para o teu utilizador)
-3. Na raiz do projeto:
+**Publicar no GitHub como privado** (após `gh auth login`):
 
 ```text
 gh repo create desafio-backend --private --source=. --remote=origin --push
 ```
 
-Se preferires criar o repositório vazio no site do GitHub: `git remote add origin <url-ssh-ou-https>` e `git push -u origin main`.
+Repo vazio no site: `git remote add origin <url>` e `git push -u origin main`.
 
-Se já tivesses feito `push` antes de reescrever o histórico, o próximo envio tem de ser `git push --force-with-lease` (reescreveste commits).
+Após reescrever histórico: `git push --force-with-lease`.

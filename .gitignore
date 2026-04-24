@@ -28,6 +28,9 @@ go.work.sum
 # Cursor (local; not versioned)
 .cursor/
 
+# Task/plan output: use sibling ../desafio-tasks (this entry avoids accidental tasks/ in repo)
+/tasks/
+
 # IDEs
 .idea/
 .vscode/

@@ -1,7 +1,12 @@
 {
 	"folders": [
 		{
-			"path": "."
+			"path": ".",
+			"name": "desafio-backend"
+		},
+		{
+			"path": "../desafio-tasks",
+			"name": "desafio-tasks"
 		}
 	],
 	"settings": {}
