@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"desafio-backend/internal/identity"
 )
 
 // EventPayload mirrors the external webhook JSON (CPF is validated then discarded from persistence paths).
@@ -28,7 +30,7 @@ func (p *EventPayload) Validate() error {
 		strings.TrimSpace(p.Timestamp) == "" {
 		return fmt.Errorf("%w: missing required fields", ErrInvalidPayload)
 	}
-	digits, err := normalizeCPFDigits(p.CPF)
+	digits, err := identity.NormalizeCPF11(p.CPF)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidPayload, err)
 	}
@@ -53,17 +55,4 @@ func (p *EventPayload) ParsedTimestamp() (*time.Time, error) {
 	}
 	u := t.UTC()
 	return &u, nil
-}
-
-func normalizeCPFDigits(s string) (string, error) {
-	s = strings.TrimSpace(s)
-	if len(s) != 11 {
-		return "", fmt.Errorf("cpf must be exactly 11 digits")
-	}
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return "", fmt.Errorf("cpf must contain only digits")
-		}
-	}
-	return s, nil
 }

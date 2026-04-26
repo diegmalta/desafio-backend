@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"desafio-backend/internal/authjwt"
 	"desafio-backend/internal/config"
 	"desafio-backend/internal/db"
 	"desafio-backend/internal/httpapi"
@@ -23,6 +24,9 @@ func main() {
 	cfg := config.Load()
 	if cfg.WebhookSecret == "" || cfg.CPFPepper == "" {
 		log.Fatal("WEBHOOK_SECRET and CPF_PEPPER must be set (see .env.example)")
+	}
+	if cfg.JWTSecret == "" {
+		log.Fatal("JWT_SECRET must be set (see .env.example)")
 	}
 
 	ctx := context.Background()
@@ -45,7 +49,13 @@ func main() {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
 	})
 	wh := webhook.NewService(pgPool, cfg.WebhookSecret, cfg.CPFPepper)
-	httpapi.Register(router, &httpapi.Deps{Pool: pgPool, Redis: redisC, Webhook: wh})
+	auth := authjwt.Middleware(pgPool, cfg.JWTSecret, cfg.CPFPepper, cfg.JWTIssuer, cfg.JWTAudience)
+	httpapi.Register(router, &httpapi.Deps{
+		Pool:    pgPool,
+		Redis:   redisC,
+		Webhook: wh,
+		AuthJWT: auth,
+	})
 
 	srv := &http.Server{
 		Addr:         cfg.HTTPAddr,

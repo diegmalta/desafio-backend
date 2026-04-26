@@ -16,6 +16,7 @@ type Deps struct {
 	Pool    *pgxpool.Pool
 	Redis   *rdb.Client
 	Webhook *webhook.Service
+	AuthJWT gin.HandlerFunc
 }
 
 // Register wires health, ready, and not-yet-implemented API routes.
@@ -30,12 +31,19 @@ func Register(r *gin.Engine, deps *Deps) {
 	} else {
 		r.POST("/webhook", stub501)
 	}
-	// Suggested REST layout (enunciado); 501 until implemented
-	grp := r.Group("/notifications")
-	{
-		grp.GET("", stub501)
-		grp.PATCH("/:id/read", stub501)
-		grp.GET("/unread-count", stub501)
+	if deps != nil && deps.Pool != nil && deps.AuthJWT != nil {
+		grp := r.Group("/notifications")
+		grp.Use(deps.AuthJWT)
+		grp.GET("", handleListNotifications(deps.Pool))
+		grp.PATCH("/:id/read", handleMarkRead(deps.Pool))
+		grp.GET("/unread-count", handleUnreadCount(deps.Pool))
+	} else {
+		grp := r.Group("/notifications")
+		{
+			grp.GET("", stub501)
+			grp.PATCH("/:id/read", stub501)
+			grp.GET("/unread-count", stub501)
+		}
 	}
 	// WebSocket (upgrade) — 501 for now; real impl. em Fase 2
 	r.GET("/ws", stub501)
