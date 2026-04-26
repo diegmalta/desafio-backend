@@ -1,0 +1,10 @@
+.git
+.github
+bin
+*.md
+.env
+.env.*
+!.env.example
+desafio-backend.code-workspace
+tasks
+.cursor
