@@ -1,42 +1,69 @@
 # desafio-backend
 
-Serviço de notificações (desafio técnico back-end Pleno — Go, Gin, PostgreSQL, Redis, WebSocket). A implementação da aplicação será adicionada em commits seguintes.
+Serviço de notificações em tempo real para cidadãos acompanharem o estado dos chamados de manutenção urbana (aberto, em análise, em execução, concluído).
 
-Ficheiros **não** versionados no Git deste repositório: [`.gitignore`](.gitignore) inclui **`.cursor/`** e qualquer `tasks/` acidental dentro do clone. Os planos e artefatos de agentes ficam em **`E:\Codigos\desafio-tasks\`** (mesmo workspace; ver [desafio-backend.code-workspace](desafio-backend.code-workspace)).
+O sistema externo da prefeitura envia eventos (webhook com assinatura HMAC), a API expõe listagem e leitura de notificações ao cidadão autenticado (JWT) e liga o cliente por WebSocket para entrega imediata.
 
-## Requisitos locais (Windows 11)
+**Esta versão** contém a stack mínima (Gin, PostgreSQL, Redis, Docker) e **rotas placeholder**; a lógica de negócio (HMAC, idempotência, CPF, JWT e WebSocket real) vem a seguir.
 
-| Ferramenta   | Uso |
-|-------------|-----|
-| Go 1.24+    | Linguagem (instalado: 1.26.x via `winget install GoLang.Go`) |
-| Docker      | `docker compose` (Docker Desktop) |
-| just        | Task runner: `just test`, etc. (`winget install Casey.Just`) |
+## Requisitos
 
-Confirmação: `go version`, `just --version`, `docker --version`.
+- Go 1.24 ou superior
+- Docker e Docker Compose
+- [just](https://github.com/casey/just) (opcional, para atalhos de comando)
 
-## Estrutura
+## Configuração
 
-- [desafio-backend.code-workspace](desafio-backend.code-workspace) — abre **duas raízes** no Cursor/VS Code: este repositório e a pasta irmã **desafio-tasks** (planos, refinamentos, saídas dos agentes; **fora** do remoto)
-- Código e config da app: repositório `desafio-backend` (Git)
+Copia [`.env.example`](.env.example) para `.env` e ajusta. Variáveis principais:
 
-## Cursor e MCP
+- `HTTP_ADDR` — endereço de escuta (ex. `:8080`)
+- `DATABASE_URL` — PostgreSQL
+- `REDIS_ADDR` — endereço do Redis (ex. `localhost:6379`)
 
-Se tiveres `desafio-backend/.cursor/mcp.json` (local, não no remoto se ignorado), podes configurar o **team-memory** (`npx @arvoretech/memory-mcp`). Requer **Node.js** (para `npx`). A pasta local `./memories` pode ser ignorada no Git (ver [.gitignore](.gitignore)).
+## Como subir
 
-## Como clonar e desenvolver (após o código existir)
+**Com Docker (recomendado):** sobe a API, Postgres (com SQL inicial) e Redis.
 
-Cria a pasta irmã ao lado do clone, por exemplo: `..\desafio-tasks\` (já referenciada no ficheiro `.code-workspace`). Instruções de `just` e `docker compose` entram com a implementação.
-
-## Git e GitHub
-
-O histórico em `main` contém ficheiros do repositório de aplicação (p.ex. `desafio-backend.code-workspace`, `.gitignore`, `README`); **não** inclui `.cursor/`, `tasks/` dentro do repo, nem o conteúdo de `desafio-tasks/`.
-
-**Publicar no GitHub como privado** (após `gh auth login`):
-
-```text
-gh repo create desafio-backend --private --source=. --remote=origin --push
+```bash
+just up
+# ou: docker compose up --build
 ```
 
-Repo vazio no site: `git remote add origin <url>` e `git push -u origin main`.
+Na primeira carga, o Postgres aplica o SQL em `migrations/`. Se já tiveres volume antigo e mudares o schema, usa `docker compose down -v` (apaga dados locais) antes de subir de novo.
 
-Após reescrever histórico: `git push --force-with-lease`.
+- API: <http://localhost:8080>
+- `GET /health` — liveness
+- `GET /ready` — PostgreSQL e Redis
+- Stubs (501, Fase 2): `POST /webhook`, `GET /notifications`, `PATCH /notifications/:id/read`, `GET /notifications/unread-count`, `GET /ws`
+
+## Comandos úteis (just)
+
+| Comando   | Descrição              |
+|----------|-------------------------|
+| `just`   | Lista as receitas       |
+| `just up`   | Sobe a stack (compose) |
+| `just build` | Compila o binário      |
+| `just test`  | `go test ./...`        |
+
+## Fase de implementação
+
+- **Agora:** ficheiro SQL de schema inicial, ligação a DB/Redis, rotas stub (501) para webhook, notificações e WebSocket
+- **Seguinte:** HMAC, JWT (`preferred_username`), idempotência, privacidade do CPF, WebSocket a sério, testes de integração
+
+## Estrutura (resumo)
+
+- `cmd/server` — entrada do processo
+- `internal/config`, `internal/db`, `internal/redis` — configuração e ligações
+- `migrations` — esquema base (também montado no container Postgres)
+- `Dockerfile` — imagem da aplicação
+
+## Decisões de design (a documentar com mais detalhe na implementação completo)
+
+- SQL com driver `pgx`, sem ORM, conforme enunciado
+- CPF: não ser armazenado em texto; na implementação, usar derivada (HMAC/ hash com segredo) para associar cidadãos
+- `just test` a invocar `go test ./...` no repositório
+
+## Stack
+
+- Go, Gin, PostgreSQL, Redis, WebSocket (a completar)
+- `docker compose up` com zero dependências fora de Docker, para avaliação do repositório

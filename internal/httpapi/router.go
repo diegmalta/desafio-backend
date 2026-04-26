@@ -1,0 +1,65 @@
+package httpapi
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"desafio-backend/internal/rdb"
+)
+
+type Deps struct {
+	Pool  *pgxpool.Pool
+	Redis *rdb.Client
+}
+
+// Register wires health, ready, and not-yet-implemented API routes.
+func Register(r *gin.Engine, deps *Deps) {
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+	r.GET("/ready", readyHandler(deps))
+
+	// Stubs — Fase 2: implementar HMAC, idempotência e persistência
+	r.POST("/webhook", stub501)
+	// Suggested REST layout (enunciado); 501 until implemented
+	grp := r.Group("/notifications")
+	{
+		grp.GET("", stub501)
+		grp.PATCH("/:id/read", stub501)
+		grp.GET("/unread-count", stub501)
+	}
+	// WebSocket (upgrade) — 501 for now; real impl. em Fase 2
+	r.GET("/ws", stub501)
+}
+
+func readyHandler(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if deps == nil || deps.Pool == nil || deps.Redis == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable", "reason": "missing dependencies"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		if err := deps.Pool.Ping(ctx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable", "db": err.Error()})
+			return
+		}
+		if err := deps.Redis.Inner.Ping(ctx).Err(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable", "redis": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
+	}
+}
+
+func stub501(c *gin.Context) {
+	c.Header("Content-Type", "application/json; charset=utf-8")
+	c.JSON(http.StatusNotImplemented, gin.H{
+		"message": "not implemented",
+		"status":  "phase_1_stub",
+	})
+}
