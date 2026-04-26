@@ -102,6 +102,10 @@ Garante que o Postgres está acessível com esse URL (ex.: `docker compose up -d
 - As migrations em `migrations/` correm só na **inicialização** do volume do container Postgres (`docker-entrypoint-initdb.d`). Alterações ao SQL exigem novo volume ou aplicação manual em bases já existentes.
 - Redis não participa nesta fatia do webhook (reservado para WebSocket/pub-sub mais tarde).
 
+## Postman
+
+Collection: [`postman/desafio-backend.postman_collection.json`](../postman/desafio-backend.postman_collection.json). Para `/notifications` é preciso JWT na variável `access_token` — ver [`notifications.md`](notifications.md).
+
 ## Código relevante
 
 - Handler e serviço: [`internal/webhook/`](../internal/webhook/)

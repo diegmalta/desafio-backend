@@ -12,6 +12,9 @@ func Load() Config {
 		RedisAddr:     getDefault("REDIS_ADDR", "localhost:6379"),
 		WebhookSecret: os.Getenv("WEBHOOK_SECRET"),
 		CPFPepper:     os.Getenv("CPF_PEPPER"),
+		JWTSecret:     os.Getenv("JWT_SECRET"),
+		JWTIssuer:     os.Getenv("JWT_ISS"),
+		JWTAudience:   os.Getenv("JWT_AUD"),
 	}
 }
 
@@ -21,6 +24,9 @@ type Config struct {
 	RedisAddr     string
 	WebhookSecret string
 	CPFPepper     string
+	JWTSecret     string
+	JWTIssuer     string
+	JWTAudience   string
 }
 
 func getDefault(key, def string) string {

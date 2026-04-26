@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"desafio-backend/internal/identity"
 	"desafio-backend/internal/repo"
 )
 
@@ -69,7 +70,7 @@ func (s *Service) HandlePOST(c *gin.Context) {
 }
 
 func (s *Service) persist(ctx context.Context, p *EventPayload) (inserted bool, err error) {
-	fp := CitizenFingerprint(s.pepper, p.CPF)
+	fp := identity.CitizenFingerprint(s.pepper, p.CPF)
 	idem := IdempotencyKey(p)
 	srcTS, err := p.ParsedTimestamp()
 	if err != nil {
