@@ -16,10 +16,14 @@ import (
 	"desafio-backend/internal/db"
 	"desafio-backend/internal/httpapi"
 	"desafio-backend/internal/rdb"
+	"desafio-backend/internal/webhook"
 )
 
 func main() {
 	cfg := config.Load()
+	if cfg.WebhookSecret == "" || cfg.CPFPepper == "" {
+		log.Fatal("WEBHOOK_SECRET and CPF_PEPPER must be set (see .env.example)")
+	}
 
 	ctx := context.Background()
 	pgPool, err := db.Connect(ctx, cfg.DatabaseURL)
@@ -40,7 +44,8 @@ func main() {
 	router.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
 	})
-	httpapi.Register(router, &httpapi.Deps{Pool: pgPool, Redis: redisC})
+	wh := webhook.NewService(pgPool, cfg.WebhookSecret, cfg.CPFPepper)
+	httpapi.Register(router, &httpapi.Deps{Pool: pgPool, Redis: redisC, Webhook: wh})
 
 	srv := &http.Server{
 		Addr:         cfg.HTTPAddr,

@@ -33,8 +33,8 @@ go.work.sum
 
 # IDEs
 .idea/
-.vscode/*
-!.vscode/tasks.json
+.vscode/
+desafio-backend.code-workspace
 *.swp
 *~
 
@@ -44,3 +44,8 @@ Thumbs.db
 
 # Debug
 __debug_bin*
+desafio-backend.code-workspace
+
+
+/postman/
+/postman/*

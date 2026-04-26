@@ -9,11 +9,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"desafio-backend/internal/rdb"
+	"desafio-backend/internal/webhook"
 )
 
 type Deps struct {
-	Pool  *pgxpool.Pool
-	Redis *rdb.Client
+	Pool    *pgxpool.Pool
+	Redis   *rdb.Client
+	Webhook *webhook.Service
 }
 
 // Register wires health, ready, and not-yet-implemented API routes.
@@ -23,8 +25,11 @@ func Register(r *gin.Engine, deps *Deps) {
 	})
 	r.GET("/ready", readyHandler(deps))
 
-	// Stubs — Fase 2: implementar HMAC, idempotência e persistência
-	r.POST("/webhook", stub501)
+	if deps != nil && deps.Webhook != nil {
+		r.POST("/webhook", deps.Webhook.HandlePOST)
+	} else {
+		r.POST("/webhook", stub501)
+	}
 	// Suggested REST layout (enunciado); 501 until implemented
 	grp := r.Group("/notifications")
 	{
