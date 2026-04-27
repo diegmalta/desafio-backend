@@ -15,6 +15,7 @@ O sistema externo da prefeitura envia eventos (webhook com assinatura HMAC), a A
 - Go 1.24 ou superior
 - Docker e Docker Compose
 - [just](https://github.com/casey/just) (opcional, para atalhos de comando)
+- [Grafana k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) (opcional, só para `just k6-webhook` / `just k6-notifications`)
 
 ## Configuração
 
@@ -91,6 +92,18 @@ Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GE
 | `just test` | `go test ./...` (unitários) |
 | `just migrate-up` | `go run ./cmd/migrate -up` (aplica migrações; usa `DATABASE_URL` do ambiente) |
 | `just test-integration` | `go test -tags=integration ./...` (requer `DATABASE_URL`, `REDIS_ADDR`; as migrações correm no início se `DATABASE_URL` estiver definida) |
+| `just k6-webhook` | `k6 run ./k6/webhook-load.js` — exige `WEBHOOK_SECRET` no ambiente (igual ao servidor) |
+| `just k6-notifications` | `k6 run ./k6/notifications-read.js` — exige `K6_JWT` (token HS256; ver abaixo) |
+
+## Testes de carga (k6)
+
+Usa apenas em **ambiente local** ou staging; não apontar para produção sem acordo.
+
+1. Instala o [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) e sobe a stack (`just up`).
+2. **Webhook:** exporta o segredo usado pelo API (o mesmo `WEBHOOK_SECRET` do `.env`). No PowerShell: `$env:WEBHOOK_SECRET = '…'; just k6-webhook`. Opcional: `BASE_URL` (default `http://localhost:8080`), `K6_CPF` (11 dígitos, default `12345678901`).
+3. **REST:** gera um JWT com `preferred_username` = CPF de 11 dígitos e `exp` no futuro, assinado com `JWT_SECRET` (e `iss` / `aud` se o servidor tiver `JWT_ISS` / `JWT_AUD`). Exemplo com Node: [docs/notifications.md](docs/notifications.md). Depois: `$env:K6_JWT = '<token>'; just k6-notifications`.
+
+Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notifications-read.js`](k6/notifications-read.js). Carga em **WebSocket** fica fora deste diferencial (extensões k6 ou testes de integração Go).
 
 ## Fase de implementação
 
@@ -106,7 +119,7 @@ Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GE
 - `internal/authjwt` — middleware JWT
 - `internal/webhook`, `internal/repo`, `internal/httpapi` — webhook, SQL, rotas HTTP
 - `internal/wsbus`, `internal/notify` — WebSocket local e fan-out Redis / outbox
-- `migrations`, `docs`, `postman`, `Dockerfile`, `k8s` (Kubernetes)
+- `migrations`, `docs`, `postman`, `Dockerfile`, `k8s`, `k6`
 
 ## Decisões de design
 
@@ -114,6 +127,7 @@ Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GE
 - CPF nunca em texto no banco; JWT usa o mesmo fingerprint que o webhook
 - `just test-integration` para Postgres + Redis reais
 - Outbox na mesma transacção que `INSERT` da notificação; worker publica em Redis com retry e estado `dead`; `webhook_dlq` grava corpo bruto e assinatura quando a persistência falha após HMAC válido
+- k6: HMAC do corpo UTF-8 enviado no POST (alinhado a [`docs/webhook.md`](docs/webhook.md)); cenários com rampa de VUs e limiar de `http_req_failed`
 
 ## Stack
 
