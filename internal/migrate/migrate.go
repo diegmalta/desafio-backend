@@ -1,4 +1,3 @@
-// Package migrator aplica as migrações SQL (golang-migrate) embebidas a partir de desafio-backend/migrations.
 package migrator
 
 import (
