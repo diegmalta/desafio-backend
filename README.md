@@ -50,6 +50,38 @@ Para correr as migrações **sem** subir o servidor: `go run ./cmd/migrate -up` 
 
 Collection Postman: [`postman/desafio-backend.postman_collection.json`](postman/desafio-backend.postman_collection.json).
 
+## Kubernetes (opcional)
+
+Manifests em [`k8s/`](k8s/) sobem **namespace** `desafio-notif`, **Postgres**, **Redis** e a **API** com as mesmas credenciais de base que o `docker-compose.yml` (`notif` / `notif`). O Secret de aplicação usa o exemplo [`k8s/app-secret.example.yaml`](k8s/app-secret.example.yaml) (valores só para desenvolvimento; em produção usa `kubectl create secret` ou um gestor de segredos).
+
+**Pré-requisitos:** cluster local (por exemplo [kind](https://kind.sigs.k8s.io/) ou minikube), `kubectl`, imagem da API construída a partir do [`Dockerfile`](Dockerfile):
+
+```bash
+docker build -t desafio-backend:latest .
+```
+
+Com **kind**, carrega a imagem para o nó do cluster (senão o kubelet não encontra `imagePullPolicy: IfNotPresent`):
+
+```bash
+kind load docker-image desafio-backend:latest
+```
+
+Aplica tudo (Kustomize inclui o Secret de exemplo; substitui os valores antes de qualquer ambiente partilhado):
+
+```bash
+kubectl apply -k k8s/
+```
+
+Expõe a API localmente:
+
+```bash
+kubectl port-forward -n desafio-notif svc/desafio-backend 8080:8080
+```
+
+Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GET /health` (liveness) e `GET /ready` (readiness e startup), init containers à espera de Postgres e Redis, e `DATABASE_URL` / `REDIS_ADDR` internos ao cluster.
+
+**Produção:** não versionar passwords ou segredos reais; preferir Secrets geridos fora do Git (External Secrets, Sealed Secrets, etc.). O Postgres no manifest usa **emptyDir** (dados perdem-se ao remover o pod); para dados persistentes, substituir por PVC ou StatefulSet e `storageClassName` adequado ao cluster.
+
 ## Comandos úteis (just)
 
 | Comando | Descrição |
@@ -75,8 +107,8 @@ Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notificat
 
 ## Fase de implementação
 
-- **Feito:** webhook (com `webhook_dlq` em falha de persistência após HMAC válido), outbox transacional + worker + Redis Pub/Sub, WebSocket `/ws`, REST com JWT, migrations (golang-migrate), testes de integração opcionais, **scripts k6** (`k6/`, receitas `just k6-*`)
-- **Seguinte (exemplos):** circuit breaker, OpenTelemetry, manifests Kubernetes
+- **Feito:** webhook (com `webhook_dlq` em falha de persistência após HMAC válido), outbox transacional + worker + Redis Pub/Sub, WebSocket `/ws`, REST com JWT, migrations (golang-migrate), testes de integração opcionais, testes de carga k6, manifests Kubernetes em `k8s/`
+- **Seguinte (exemplos):** circuit breaker, OpenTelemetry
 
 ## Estrutura (resumo)
 
@@ -87,7 +119,7 @@ Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notificat
 - `internal/authjwt` — middleware JWT
 - `internal/webhook`, `internal/repo`, `internal/httpapi` — webhook, SQL, rotas HTTP
 - `internal/wsbus`, `internal/notify` — WebSocket local e fan-out Redis / outbox
-- `migrations`, `docs`, `postman`, `k6`, `Dockerfile`
+- `migrations`, `docs`, `postman`, `Dockerfile`, `k8s`, `k6`
 
 ## Decisões de design
 
