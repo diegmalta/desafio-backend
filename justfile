@@ -24,6 +24,14 @@ migrate-up:
 test-integration:
     go test -tags=integration -count=1 ./...
 
+# Carga (k6): define WEBHOOK_SECRET no ambiente; opcional BASE_URL, K6_CPF
+k6-webhook:
+    k6 run ./k6/webhook-load.js
+
+# Carga (k6): define K6_JWT (Bearer, sem prefixo); opcional BASE_URL
+k6-notifications:
+    k6 run ./k6/notifications-read.js
+
 # Formatação (opcional)
 fmt:
     go fmt ./...
