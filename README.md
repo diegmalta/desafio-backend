@@ -51,7 +51,6 @@ Para correr as migrações **sem** subir o servidor: `go run ./cmd/migrate -up` 
 - `GET /notifications`, `PATCH /notifications/:id/read`, `GET /notifications/unread-count` — JWT Bearer ([`docs/notifications.md`](docs/notifications.md))
 - `GET /ws` — WebSocket com JWT ([`docs/websocket.md`](docs/websocket.md))
 
-Collection Postman: [`postman/desafio-backend.postman_collection.json`](postman/desafio-backend.postman_collection.json).
 
 ## Kubernetes (opcional)
 
