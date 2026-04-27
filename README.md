@@ -31,6 +31,7 @@ Copia [`.env.example`](.env.example) para `.env` e ajusta. Variáveis principais
 - `JWT_SECRET` — segredo HS256 para validar JWT da API de notificações (**obrigatório**)
 - `JWT_ISS` / `JWT_AUD` — opcionais; se definidos, o token tem de conter `iss` / `aud` compatíveis
 - Opcionais (defaults seguros): `OUTBOX_BATCH_SIZE`, `OUTBOX_POLL_INTERVAL`, `OUTBOX_MAX_ATTEMPTS`, `OUTBOX_BACKOFF_BASE`, `WS_WRITE_TIMEOUT`, `WS_PING_INTERVAL`, `WS_PONG_WAIT`, `WS_READ_LIMIT`
+- Tracing: `OTEL_SERVICE_NAME` (default `desafio-backend`), `OTEL_TRACES_EXPORTER` (`stdout` ou `none` para desativar exportação)
 
 ## Como subir
 
@@ -50,7 +51,6 @@ Para correr as migrações **sem** subir o servidor: `go run ./cmd/migrate -up` 
 - `GET /notifications`, `PATCH /notifications/:id/read`, `GET /notifications/unread-count` — JWT Bearer ([`docs/notifications.md`](docs/notifications.md))
 - `GET /ws` — WebSocket com JWT ([`docs/websocket.md`](docs/websocket.md))
 
-Collection Postman: [`postman/desafio-backend.postman_collection.json`](postman/desafio-backend.postman_collection.json).
 
 ## Kubernetes (opcional)
 
@@ -122,13 +122,14 @@ Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notificat
 ## Verificação completa (local / CI)
 
 - **`just test`** — o mínimo exigido pelo desafio (`go test ./...`).
+- **`just test-telemetry`** — testes de OpenTelemetry (`internal/telemetry`, span `otelgin` em `/health`).
 - **`just test-all`** — inclui análise estática, compilação de todos os pacotes, testes unitários sem cache, validação do `docker-compose.yml` e manifests Kubernetes **sem** precisar de cluster acessível (kubeconform). Requer **Docker** e **kubectl** no PATH.
 - **`just test-full`** — `just test-all` seguido de `just test-integration`. Sem `DATABASE_URL` (e `REDIS_ADDR` onde aplicável) os testes de integração **fazem skip** e o comando ainda termina com sucesso; para realmente exercitar a stack, exporta essas variáveis ou usa `just up` e o mesmo `DATABASE_URL` / `REDIS_ADDR` que o compose expõe no host.
 
 ## Fase de implementação
 
-- **Feito:** webhook (com `webhook_dlq` em falha de persistência após HMAC válido), outbox transacional + worker + Redis Pub/Sub, WebSocket `/ws`, REST com JWT, migrations (golang-migrate), testes de integração opcionais, testes de carga k6, manifests Kubernetes em `k8s/`
-- **Seguinte (exemplos):** circuit breaker, OpenTelemetry
+- **Feito:** webhook (com `webhook_dlq` em falha de persistência após HMAC válido), outbox transacional + worker + Redis Pub/Sub, WebSocket `/ws`, REST com JWT, migrations (golang-migrate), testes de integração opcionais, testes de carga k6, manifests Kubernetes em `k8s/`, tracing OpenTelemetry (Gin + exportador stdout)
+- **Seguinte (exemplos):** circuit breaker, exportador OTLP
 
 ## Estrutura (resumo)
 
@@ -138,6 +139,7 @@ Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notificat
 - `internal/identity` — fingerprint do CPF (partilhado webhook + JWT)
 - `internal/authjwt` — middleware JWT
 - `internal/webhook`, `internal/repo`, `internal/httpapi` — webhook, SQL, rotas HTTP
+- `internal/telemetry` — inicialização do TracerProvider (stdout; `OTEL_TRACES_EXPORTER=none` desativa)
 - `internal/wsbus`, `internal/notify` — WebSocket local e fan-out Redis / outbox
 - `migrations`, `docs`, `postman`, `Dockerfile`, `k8s`, `k6`
 
