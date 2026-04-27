@@ -16,6 +16,10 @@ build:
 test:
     go test ./...
 
+# OpenTelemetry (pacote telemetry + span Gin em /health)
+test-telemetry:
+    go test -count=1 ./internal/telemetry/... ./internal/httpapi -run "TestOTel|TestInitTracesExporterNone|TestInitEmptyServiceName"
+
 # Testes sem cache de resultados (útil para CI / verificação completa)
 test-nocache:
     go test -count=1 ./...

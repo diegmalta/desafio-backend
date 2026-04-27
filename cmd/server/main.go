@@ -19,8 +19,11 @@ import (
 	migrator "desafio-backend/internal/migrate"
 	"desafio-backend/internal/notify"
 	"desafio-backend/internal/rdb"
+	"desafio-backend/internal/telemetry"
 	"desafio-backend/internal/webhook"
 	"desafio-backend/internal/wsbus"
+
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 func main() {
@@ -33,6 +36,17 @@ func main() {
 	}
 
 	ctx := context.Background()
+	teleShutdown, err := telemetry.Init(ctx, cfg.OTELServiceName, cfg.OTELTracesExporter)
+	if err != nil {
+		log.Fatalf("telemetry: %v", err)
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := teleShutdown(sctx); err != nil {
+			log.Printf("telemetry shutdown: %v", err)
+		}
+	}()
 	if err := migrator.Up(ctx, cfg.DatabaseURL); err != nil {
 		log.Fatalf("migrations: %v", err)
 	}
@@ -66,6 +80,7 @@ func main() {
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
+	router.Use(otelgin.Middleware(cfg.OTELServiceName))
 	router.Use(gin.Recovery())
 	router.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})

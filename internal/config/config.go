@@ -27,6 +27,9 @@ func Load() Config {
 		WSPingInterval: getDurationDefault("WS_PING_INTERVAL", 30*time.Second),
 		WSPongWait:     getDurationDefault("WS_PONG_WAIT", 60*time.Second),
 		WSReadLimit:    getInt64Default("WS_READ_LIMIT", 1<<20),
+
+		OTELServiceName:    getDefault("OTEL_SERVICE_NAME", "desafio-backend"),
+		OTELTracesExporter: getDefault("OTEL_TRACES_EXPORTER", "stdout"),
 	}
 }
 
@@ -49,6 +52,9 @@ type Config struct {
 	WSPingInterval time.Duration
 	WSPongWait     time.Duration
 	WSReadLimit    int64
+
+	OTELServiceName    string
+	OTELTracesExporter string
 }
 
 func getDefault(key, def string) string {
