@@ -29,14 +29,14 @@ Copia [`.env.example`](.env.example) para `.env` e ajusta. Variáveis principais
 
 ## Como subir
 
-**Com Docker (recomendado):** sobe a API, Postgres (com SQL inicial) e Redis. O serviço **`app` lê o ficheiro `.env`** na raiz do projeto (`env_file`). Tens de ter um `.env` (por exemplo copiado de `.env.example`). Os valores **`DATABASE_URL` e `REDIS_ADDR` dentro do container** são definidos pelo `docker-compose.yml` para apontar aos serviços `postgres` e `redis` (os do `.env` com `localhost` servem para `go run` na máquina anfitriã).
+**Com Docker (recomendado):** sobe a API, Postgres e Redis. O serviço **`app` lê o ficheiro `.env`** na raiz do projeto (`env_file`). Tens de ter um `.env` (por exemplo copiado de `.env.example`). Os valores **`DATABASE_URL` e `REDIS_ADDR` dentro do container** são definidos pelo `docker-compose.yml` para apontar aos serviços `postgres` e `redis` (os do `.env` com `localhost` servem para `go run` na máquina anfitriã). O arranque do `app` aplica o schema com **[golang-migrate](https://github.com/golang-migrate/migrate)** a partir dos ficheiros em `migrations/` (incluídos no binário via `go:embed`).
 
 ```bash
 just up
 # ou: docker compose up --build
 ```
 
-Na primeira carga, o Postgres aplica os ficheiros em `migrations/` por ordem. Se já tiveres volume antigo e mudares o schema, usa `docker compose down -v` antes de subir de novo.
+Para correr as migrações **sem** subir o servidor: `go run ./cmd/migrate -up` (ou `just migrate-up`). Bases vazias são preenchidas; para uma base com schema de um fluxo antigo (só `docker-entrypoint-initdb.d`) e sem tabela `schema_migrations`, usa `docker compose down -v` ou ajusta a versão com a CLI [`migrate force`](https://github.com/golang-migrate/migrate/blob/master/GETTING_STARTED.md#forcing-your-database-version).
 
 - API: <http://localhost:8080>
 - `GET /health` — liveness
@@ -55,7 +55,8 @@ Collection Postman: [`postman/desafio-backend.postman_collection.json`](postman/
 | `just up` | Sobe a stack (compose) |
 | `just build` | Compila o binário |
 | `just test` | `go test ./...` (unitários) |
-| `just test-integration` | `go test -tags=integration ./...` (requer `DATABASE_URL`, `REDIS_ADDR`, schema migrado) |
+| `just migrate-up` | `go run ./cmd/migrate -up` (aplica migrações; usa `DATABASE_URL` do ambiente) |
+| `just test-integration` | `go test -tags=integration ./...` (requer `DATABASE_URL`, `REDIS_ADDR`; as migrações correm no início se `DATABASE_URL` estiver definida) |
 
 ## Fase de implementação
 
@@ -64,7 +65,8 @@ Collection Postman: [`postman/desafio-backend.postman_collection.json`](postman/
 
 ## Estrutura (resumo)
 
-- `cmd/server` — entrada do processo
+- `cmd/server` — entrada do processo; `cmd/migrate` — CLI de migrações (opcional em dev)
+- `internal/migrate` — aplicação das migrações embebidas (também no arranque do servidor)
 - `internal/config`, `internal/db`, `internal/rdb` — configuração e ligações
 - `internal/identity` — fingerprint do CPF (partilhado webhook + JWT)
 - `internal/authjwt` — middleware JWT

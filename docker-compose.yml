@@ -14,7 +14,6 @@ services:
       retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
 
   redis:
     image: redis:7-alpine
