@@ -81,7 +81,7 @@ Coloca a string no Postman na variável `access_token` (sem o prefixo `Bearer `)
 
 ## Testes de integração
 
-Requer **`DATABASE_URL`**, **`REDIS_ADDR`** (o router de integração regista `/ready`), e os segredos alinhados com o servidor (`JWT_SECRET`, `CPF_PEPPER`, `WEBHOOK_SECRET` — ver `internal/httpapi/notifications_integration_test.go`).
+Requer **`DATABASE_URL`**, **`REDIS_ADDR`** (o router de integração regista `/ready`), e os segredos alinhados com o servidor (`JWT_SECRET`, `CPF_PEPPER`, `WEBHOOK_SECRET` — ver `internal/httpapi/notifications_integration_test.go`). Com `DATABASE_URL` definido, o `TestMain` aplica as migrações embebidas (golang-migrate) antes dos testes.
 
 ```bash
 export DATABASE_URL='postgres://notif:notif@localhost:5432/notif?sslmode=disable'

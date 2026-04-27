@@ -88,18 +88,18 @@ Ver [`.env.example`](../.env.example). O `docker-compose.yml` define valores **a
 ## Testes
 
 - Unitários: `go test ./...` (inclui `internal/webhook`).
-- Integração (Postgres real, schema com `001` + `002` aplicados):
+- Integração (Postgres real; o `TestMain` aplica o schema com golang-migrate se `DATABASE_URL` estiver definido):
 
 ```bash
 export DATABASE_URL='postgres://notif:notif@localhost:5432/notif?sslmode=disable'
 just test-integration
 ```
 
-Garante que o Postgres está acessível com esse URL (ex.: `docker compose up -d postgres` e, na **primeira** criação do volume, as migrations em `migrations/`). Se alterares o schema e já existir volume antigo: `docker compose down -v` antes de subir de novo.
+Garante que o Postgres está acessível (ex.: `docker compose up -d postgres` ou stack completa). Podes aplicar o schema com `go run ./cmd/migrate -up` antes de correr testes, ou deixar o `TestMain` aplicar. Se tiveres um volume antigo criado com o initdb de `docker-entrypoint-initdb.d` (antes desta tool) e a base ainda **não** tiver tabela `schema_migrations`, usa `docker compose down -v` ou força a versão com a [documentação do golang-migrate](https://github.com/golang-migrate/migrate/blob/master/GETTING_STARTED.md#forcing-your-database-version).
 
 ## Limitações conhecidas
 
-- As migrations em `migrations/` correm só na **inicialização** do volume do container Postgres (`docker-entrypoint-initdb.d`). Alterações ao SQL exigem novo volume ou aplicação manual em bases já existentes.
+- O histórico de schema e a aplicação das alterações usam a tabela `schema_migrations` (golang-migrate), não o `initdb` do container.
 - Redis não participa nesta fatia do webhook (reservado para WebSocket/pub-sub mais tarde).
 
 ## Postman

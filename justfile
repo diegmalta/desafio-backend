@@ -16,6 +16,10 @@ build:
 test:
     go test ./...
 
+# Migrações (DATABASE_URL; por defeito a do .env se exportado, ou a local do projecto)
+migrate-up:
+    go run ./cmd/migrate -up
+
 # Integração (Postgres acessível; ex.: DATABASE_URL do compose na porta local)
 test-integration:
     go test -tags=integration -count=1 ./...

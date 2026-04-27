@@ -16,6 +16,7 @@ import (
 	"desafio-backend/internal/config"
 	"desafio-backend/internal/db"
 	"desafio-backend/internal/httpapi"
+	migrator "desafio-backend/internal/migrate"
 	"desafio-backend/internal/rdb"
 	"desafio-backend/internal/webhook"
 )
@@ -30,6 +31,9 @@ func main() {
 	}
 
 	ctx := context.Background()
+	if err := migrator.Up(ctx, cfg.DatabaseURL); err != nil {
+		log.Fatalf("migrations: %v", err)
+	}
 	pgPool, err := db.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("database: %v", err)
