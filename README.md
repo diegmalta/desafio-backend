@@ -15,7 +15,9 @@ O sistema externo da prefeitura envia eventos (webhook com assinatura HMAC), a A
 - Go 1.24 ou superior
 - Docker e Docker Compose
 - [just](https://github.com/casey/just) (opcional, para atalhos de comando)
-- [Grafana k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) (opcional, só para `just k6-webhook` / `just k6-notifications`)
+- [Docker](https://docs.docker.com/get-docker/) — para `just k6-webhook` / `just k6-notifications` (k6), `just test-all` (kubeconform + compose) e validação K8s offline
+- [`kubectl`](https://kubernetes.io/docs/tasks/tools/) — para `just k8s-*` (renderização Kustomize e, opcionalmente, dry-run contra o cluster)
+- [Grafana k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) (opcional, só se quiseres `just k6-webhook-native` / `just k6-notifications-native` no PATH)
 
 ## Configuração
 
@@ -82,6 +84,8 @@ Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GE
 
 **Produção:** não versionar passwords ou segredos reais; preferir Secrets geridos fora do Git (External Secrets, Sealed Secrets, etc.). O Postgres no manifest usa **emptyDir** (dados perdem-se ao remover o pod); para dados persistentes, substituir por PVC ou StatefulSet e `storageClassName` adequado ao cluster.
 
+**Validar manifests sem cluster (recomendado em CI):** `just k8s-validate` — corre `kubectl kustomize` e [kubeconform](https://github.com/yannh/kubeconform) (`ghcr.io/yannh/kubeconform:v0.6.7`) em Docker sobre o YAML renderizado; **não** exige permissões no API server. Se tiveres contexto kubectl e quiseres simular `kubectl apply` no cliente (pode falhar por RBAC), usa `just k8s-apply-dry-run-client`; validação no servidor: `just k8s-validate-server`.
+
 ## Comandos úteis (just)
 
 | Comando | Descrição |
@@ -90,20 +94,36 @@ Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GE
 | `just up` | Sobe a stack (compose) |
 | `just build` | Compila o binário |
 | `just test` | `go test ./...` (unitários) |
+| `just test-nocache` | `go test -count=1 ./...` (sem cache de resultados) |
+| `just test-all` | Verificação ampla **sem** Postgres/Redis: `go mod verify`, `docker compose config` (saída suprimida), `go vet`, `go build ./...`, testes unitários sem cache, `just k8s-validate` |
+| `just test-full` | `just test-all` seguido de `just test-integration` (exige `DATABASE_URL` e `REDIS_ADDR`, ex.: com `just up`) |
+| `just mod-verify` / `just vet` / `just build-check` / `just compose-validate` | Passos isolados usados por `test-all` |
+| `just k8s-kustomize` | Só `kubectl kustomize k8s/` (falha se o YAML estiver inválido) |
+| `just k8s-validate` | Kustomize + kubeconform em Docker (schemas K8s; offline) |
+| `just k8s-apply-dry-run-client` | `kubectl apply -k k8s/ --dry-run=client` (pode contactar o API server) |
+| `just k8s-validate-server` | `kubectl apply -k k8s/ --dry-run=server` (requer permissões no namespace) |
 | `just migrate-up` | `go run ./cmd/migrate -up` (aplica migrações; usa `DATABASE_URL` do ambiente) |
 | `just test-integration` | `go test -tags=integration ./...` (requer `DATABASE_URL`, `REDIS_ADDR`; as migrações correm no início se `DATABASE_URL` estiver definida) |
-| `just k6-webhook` | `k6 run ./k6/webhook-load.js` — exige `WEBHOOK_SECRET` no ambiente (igual ao servidor) |
-| `just k6-notifications` | `k6 run ./k6/notifications-read.js` — exige `K6_JWT` (token HS256; ver abaixo) |
+| `just k6-webhook` | Carga no webhook via **Docker** (`grafana/k6`) — exige `WEBHOOK_SECRET` no ambiente; `BASE_URL` opcional (padrão `http://host.docker.internal:8080` para alcançar a API no anfitrião) |
+| `just k6-notifications` | Carga em `GET /notifications` via Docker — exige `K6_JWT`; `BASE_URL` opcional (mesmo padrão) |
+| `just k6-webhook-native` / `just k6-notifications-native` | Igual, mas com o binário `k6` no PATH (`BASE_URL` padrão `http://localhost:8080` nos scripts) |
 
 ## Testes de carga (k6)
 
 Usa apenas em **ambiente local** ou staging; não apontar para produção sem acordo.
 
-1. Instala o [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) e sobe a stack (`just up`).
-2. **Webhook:** exporta o segredo usado pelo API (o mesmo `WEBHOOK_SECRET` do `.env`). No PowerShell: `$env:WEBHOOK_SECRET = '…'; just k6-webhook`. Opcional: `BASE_URL` (default `http://localhost:8080`), `K6_CPF` (11 dígitos, default `12345678901`).
-3. **REST:** gera um JWT com `preferred_username` = CPF de 11 dígitos e `exp` no futuro, assinado com `JWT_SECRET` (e `iss` / `aud` se o servidor tiver `JWT_ISS` / `JWT_AUD`). Exemplo com Node: [docs/notifications.md](docs/notifications.md). Depois: `$env:K6_JWT = '<token>'; just k6-notifications`.
+1. Sobe a stack (`just up`) com a API acessível na porta publicada (ex.: 8080 no anfitrião).
+2. **Webhook:** no PowerShell, o mesmo segredo que no `.env` do servidor: `$env:WEBHOOK_SECRET = '…'; just k6-webhook`. O `just` usa **Docker** (`grafana/k6`); por padrão `BASE_URL` é `http://host.docker.internal:8080` para o contentor alcançar a API no Windows/macOS. Se a API estiver doutro host, define `$env:BASE_URL = 'http://…'`. Opcional: `K6_CPF` (11 dígitos; o script tem padrão `12345678901`).
+3. **REST:** gera um JWT (ver [docs/notifications.md](docs/notifications.md)). `$env:K6_JWT = '<token>'; just k6-notifications`.
+4. Se tiveres o binário **k6** instalado e quiseres falar com `http://localhost:8080` sem Docker, usa `just k6-webhook-native` / `just k6-notifications-native` com as mesmas variáveis.
 
 Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notifications-read.js`](k6/notifications-read.js). Carga em **WebSocket** fica fora deste diferencial (extensões k6 ou testes de integração Go).
+
+## Verificação completa (local / CI)
+
+- **`just test`** — o mínimo exigido pelo desafio (`go test ./...`).
+- **`just test-all`** — inclui análise estática, compilação de todos os pacotes, testes unitários sem cache, validação do `docker-compose.yml` e manifests Kubernetes **sem** precisar de cluster acessível (kubeconform). Requer **Docker** e **kubectl** no PATH.
+- **`just test-full`** — `just test-all` seguido de `just test-integration`. Sem `DATABASE_URL` (e `REDIS_ADDR` onde aplicável) os testes de integração **fazem skip** e o comando ainda termina com sucesso; para realmente exercitar a stack, exporta essas variáveis ou usa `just up` e o mesmo `DATABASE_URL` / `REDIS_ADDR` que o compose expõe no host.
 
 ## Fase de implementação
 
@@ -128,6 +148,7 @@ Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notificat
 - `just test-integration` para Postgres + Redis reais
 - Outbox na mesma transacção que `INSERT` da notificação; worker publica em Redis com retry e estado `dead`; `webhook_dlq` grava corpo bruto e assinatura quando a persistência falha após HMAC válido
 - k6: HMAC do corpo UTF-8 enviado no POST (alinhado a [`docs/webhook.md`](docs/webhook.md)); cenários com rampa de VUs e limiar de `http_req_failed`
+- K8s offline: `just k8s-validate` com kubeconform evita depender de RBAC no `kubectl apply --dry-run=client`
 
 ## Stack
 
