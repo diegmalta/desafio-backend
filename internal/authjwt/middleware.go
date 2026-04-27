@@ -39,16 +39,9 @@ type accessClaims struct {
 	PreferredUsername string `json:"preferred_username"`
 }
 
-// BearerFromRequest returns a JWT from Authorization: Bearer or ?access_token= (WebSocket / tooling).
+// BearerFromRequest returns a JWT from Authorization: Bearer (mesmo contrato que a REST; Postman suporta no handshake WS).
 func BearerFromRequest(c *gin.Context) (raw string, ok bool) {
-	if t, ok := bearerToken(c.GetHeader("Authorization")); ok {
-		return t, true
-	}
-	q := strings.TrimSpace(c.Query("access_token"))
-	if q != "" {
-		return q, true
-	}
-	return "", false
+	return bearerToken(c.GetHeader("Authorization"))
 }
 
 // ResolveCitizenFromToken validates HS256 JWT and maps preferred_username to citizen_id.
