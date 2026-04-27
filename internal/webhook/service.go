@@ -3,7 +3,9 @@ package webhook
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -59,6 +61,9 @@ func (s *Service) HandlePOST(c *gin.Context) {
 
 	inserted, err := s.persist(c.Request.Context(), &p)
 	if err != nil {
+		if dlqErr := repo.InsertWebhookDLQ(c.Request.Context(), s.pool, body, sigHeader, "persist_failed", err.Error()); dlqErr != nil {
+			log.Printf("webhook dlq: %v", dlqErr)
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
 		return
 	}
@@ -95,9 +100,18 @@ func (s *Service) persist(ctx context.Context, p *EventPayload) (inserted bool, 
 		SourceTimestamp: srcTS,
 	}
 
-	ok, _, err := repo.InsertNotificationIdempotent(ctx, tx, params)
+	ok, citizenID, nid, err := repo.InsertNotificationIdempotent(ctx, tx, params)
 	if err != nil {
 		return false, err
+	}
+	if ok {
+		payload, err := OutboxPayloadJSON(nid, p, time.Now().UTC())
+		if err != nil {
+			return false, err
+		}
+		if err := repo.InsertOutbox(ctx, tx, citizenID, nid, payload); err != nil {
+			return false, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, err
