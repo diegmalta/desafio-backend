@@ -4,10 +4,7 @@ O app mantém uma ligação WebSocket para receber notificações **assim que** 
 
 ## Autenticação
 
-| Método | Descrição |
-|--------|-----------|
-| Header `Authorization: Bearer <jwt>` | Preferido (app controla o handshake). |
-| Query `?access_token=<jwt>` | Alternativa para ferramentas (`wscat`, Postman). |
+Header **`Authorization: Bearer <jwt>`** no pedido de upgrade (igual ao REST). Postman e clientes HTTP enviam este header no handshake WebSocket sem precisar de query string.
 
 O JWT é o mesmo da API REST (**HS256**, `JWT_SECRET`), com claim **`preferred_username`** = CPF 11 dígitos e `exp` válido. Opcionais `JWT_ISS` / `JWT_AUD` aplicam-se tal como em [`notifications.md`](notifications.md).
 
@@ -41,12 +38,6 @@ Substitui o token JWT válido:
 
 ```bash
 wscat -c "ws://localhost:8080/ws" -H "Authorization: Bearer SEU_JWT_AQUI"
-```
-
-Ou com query:
-
-```bash
-wscat -c "ws://localhost:8080/ws?access_token=SEU_JWT_AQUI"
 ```
 
 ## Código
