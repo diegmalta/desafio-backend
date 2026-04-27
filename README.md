@@ -4,10 +4,11 @@ Serviço de notificações em tempo real para cidadãos acompanharem o estado do
 
 O sistema externo da prefeitura envia eventos (webhook com assinatura HMAC), a API expõe listagem e leitura de notificações ao cidadão autenticado (JWT) e liga o cliente por WebSocket para entrega imediata.
 
-**Esta versão** inclui **`POST /webhook`** (HMAC, idempotência, fingerprint, persistência) e **REST `/notifications`** com **JWT** (`preferred_username` = CPF). WebSocket (`/ws`) ainda é stub (**501**).
+**Esta versão** inclui **`POST /webhook`** (HMAC, idempotência, fingerprint, persistência, **outbox** + **DLQ** em falha de persistência), **REST `/notifications`** com **JWT** (`preferred_username` = CPF) e **WebSocket `/ws`** com broadcast via **Redis Pub/Sub** (`notif:citizen:<uuid>`) e hub in-memory por processo.
 
 - Webhook: [`docs/webhook.md`](docs/webhook.md)
 - Notificações: [`docs/notifications.md`](docs/notifications.md)
+- WebSocket: [`docs/websocket.md`](docs/websocket.md)
 
 ## Requisitos
 
@@ -26,6 +27,7 @@ Copia [`.env.example`](.env.example) para `.env` e ajusta. Variáveis principais
 - `CPF_PEPPER` — segredo para derivar `citizens.fingerprint` a partir do CPF (**obrigatório**; distinto do webhook)
 - `JWT_SECRET` — segredo HS256 para validar JWT da API de notificações (**obrigatório**)
 - `JWT_ISS` / `JWT_AUD` — opcionais; se definidos, o token tem de conter `iss` / `aud` compatíveis
+- Opcionais (defaults seguros): `OUTBOX_BATCH_SIZE`, `OUTBOX_POLL_INTERVAL`, `OUTBOX_MAX_ATTEMPTS`, `OUTBOX_BACKOFF_BASE`, `WS_WRITE_TIMEOUT`, `WS_PING_INTERVAL`, `WS_PONG_WAIT`, `WS_READ_LIMIT`
 
 ## Como subir
 
@@ -43,7 +45,7 @@ Para correr as migrações **sem** subir o servidor: `go run ./cmd/migrate -up` 
 - `GET /ready` — PostgreSQL e Redis
 - `POST /webhook` — evento assinado ([`docs/webhook.md`](docs/webhook.md))
 - `GET /notifications`, `PATCH /notifications/:id/read`, `GET /notifications/unread-count` — JWT Bearer ([`docs/notifications.md`](docs/notifications.md))
-- Stub (501): `GET /ws`
+- `GET /ws` — WebSocket com JWT ([`docs/websocket.md`](docs/websocket.md))
 
 Collection Postman: [`postman/desafio-backend.postman_collection.json`](postman/desafio-backend.postman_collection.json).
 
@@ -60,8 +62,8 @@ Collection Postman: [`postman/desafio-backend.postman_collection.json`](postman/
 
 ## Fase de implementação
 
-- **Feito:** webhook, REST de notificações com JWT e isolamento por cidadão, migrations, testes de integração opcionais
-- **Seguinte:** WebSocket em `/ws` e broadcast após eventos
+- **Feito:** webhook (com `webhook_dlq` em falha de persistência após HMAC válido), outbox transacional + worker + Redis Pub/Sub, WebSocket `/ws`, REST com JWT, migrations (golang-migrate), testes de integração opcionais
+- **Seguinte (exemplos):** testes de carga k6, circuit breaker, OpenTelemetry, manifests Kubernetes
 
 ## Estrutura (resumo)
 
@@ -71,6 +73,7 @@ Collection Postman: [`postman/desafio-backend.postman_collection.json`](postman/
 - `internal/identity` — fingerprint do CPF (partilhado webhook + JWT)
 - `internal/authjwt` — middleware JWT
 - `internal/webhook`, `internal/repo`, `internal/httpapi` — webhook, SQL, rotas HTTP
+- `internal/wsbus`, `internal/notify` — WebSocket local e fan-out Redis / outbox
 - `migrations`, `docs`, `postman`, `Dockerfile`
 
 ## Decisões de design
@@ -78,8 +81,9 @@ Collection Postman: [`postman/desafio-backend.postman_collection.json`](postman/
 - SQL com `pgx`, sem ORM
 - CPF nunca em texto no banco; JWT usa o mesmo fingerprint que o webhook
 - `just test-integration` para Postgres + Redis reais
+- Outbox na mesma transacção que `INSERT` da notificação; worker publica em Redis com retry e estado `dead`; `webhook_dlq` grava corpo bruto e assinatura quando a persistência falha após HMAC válido
 
 ## Stack
 
-- Go, Gin, PostgreSQL, Redis, WebSocket (a completar)
+- Go, Gin, PostgreSQL, Redis, WebSocket (gorilla/websocket)
 - `docker compose up` com zero dependências fora de Docker, para avaliação do repositório

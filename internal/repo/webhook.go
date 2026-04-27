@@ -41,10 +41,11 @@ func EnsureCitizenID(ctx context.Context, tx pgx.Tx, fingerprint []byte) (uuid.U
 
 // InsertNotificationIdempotent inserts a notification or detects duplicate idempotency_key.
 // inserted is false when ON CONFLICT matched (same event re-delivered).
-func InsertNotificationIdempotent(ctx context.Context, tx pgx.Tx, p WebhookInsertParams) (inserted bool, notificationID uuid.UUID, err error) {
-	citizenID, err := EnsureCitizenID(ctx, tx, p.Fingerprint)
+// citizenID is always the row for the fingerprint (EnsureCitizenID runs before insert).
+func InsertNotificationIdempotent(ctx context.Context, tx pgx.Tx, p WebhookInsertParams) (inserted bool, citizenID uuid.UUID, notificationID uuid.UUID, err error) {
+	citizenID, err = EnsureCitizenID(ctx, tx, p.Fingerprint)
 	if err != nil {
-		return false, uuid.Nil, err
+		return false, uuid.Nil, uuid.Nil, err
 	}
 
 	var nid uuid.UUID
@@ -60,11 +61,11 @@ func InsertNotificationIdempotent(ctx context.Context, tx pgx.Tx, p WebhookInser
 	).Scan(&nid)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, uuid.Nil, nil
+			return false, citizenID, uuid.Nil, nil
 		}
-		return false, uuid.Nil, err
+		return false, uuid.Nil, uuid.Nil, err
 	}
-	return true, nid, nil
+	return true, citizenID, nid, nil
 }
 
 func nullIfEmpty(s string) any {

@@ -17,8 +17,10 @@ import (
 	"desafio-backend/internal/db"
 	"desafio-backend/internal/httpapi"
 	migrator "desafio-backend/internal/migrate"
+	"desafio-backend/internal/notify"
 	"desafio-backend/internal/rdb"
 	"desafio-backend/internal/webhook"
+	"desafio-backend/internal/wsbus"
 )
 
 func main() {
@@ -46,6 +48,22 @@ func main() {
 	}
 	defer redisC.Close()
 
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
+
+	hub := wsbus.NewHub()
+	worker := &notify.Worker{
+		Pool:         pgPool,
+		Redis:        redisC.Inner,
+		BatchSize:    cfg.OutboxBatchSize,
+		PollInterval: cfg.OutboxPollInterval,
+		MaxAttempts:  cfg.OutboxMaxAttempts,
+		BackoffBase:  cfg.OutboxBackoffBase,
+	}
+	sub := &notify.Subscriber{Redis: redisC.Inner, Hub: hub}
+	go worker.Run(rootCtx)
+	go sub.Run(rootCtx)
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -55,10 +73,19 @@ func main() {
 	wh := webhook.NewService(pgPool, cfg.WebhookSecret, cfg.CPFPepper)
 	auth := authjwt.Middleware(pgPool, cfg.JWTSecret, cfg.CPFPepper, cfg.JWTIssuer, cfg.JWTAudience)
 	httpapi.Register(router, &httpapi.Deps{
-		Pool:    pgPool,
-		Redis:   redisC,
-		Webhook: wh,
-		AuthJWT: auth,
+		Pool:           pgPool,
+		Redis:          redisC,
+		Webhook:        wh,
+		AuthJWT:        auth,
+		Hub:            hub,
+		JWTSecret:      cfg.JWTSecret,
+		CPFPepper:      cfg.CPFPepper,
+		JWTIssuer:      cfg.JWTIssuer,
+		JWTAudience:    cfg.JWTAudience,
+		WSWriteTimeout: cfg.WSWriteTimeout,
+		WSPingInterval: cfg.WSPingInterval,
+		WSPongWait:     cfg.WSPongWait,
+		WSReadLimit:    cfg.WSReadLimit,
 	})
 
 	srv := &http.Server{
@@ -74,14 +101,20 @@ func main() {
 			log.Fatalf("server: %v", err)
 		}
 	}()
-	waitShutdown(srv)
+	waitShutdown(srv, rootCancel, hub)
 }
 
-func waitShutdown(srv *http.Server) {
+func waitShutdown(srv *http.Server, cancel context.CancelFunc, hub *wsbus.Hub) {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	<-ch
 	log.Println("shutting down")
+	if cancel != nil {
+		cancel()
+	}
+	if hub != nil {
+		hub.Close()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)

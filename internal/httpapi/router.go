@@ -10,6 +10,7 @@ import (
 
 	"desafio-backend/internal/rdb"
 	"desafio-backend/internal/webhook"
+	"desafio-backend/internal/wsbus"
 )
 
 type Deps struct {
@@ -17,6 +18,17 @@ type Deps struct {
 	Redis   *rdb.Client
 	Webhook *webhook.Service
 	AuthJWT gin.HandlerFunc
+
+	Hub         *wsbus.Hub
+	JWTSecret   string
+	CPFPepper   string
+	JWTIssuer   string
+	JWTAudience string
+
+	WSWriteTimeout time.Duration
+	WSPingInterval time.Duration
+	WSPongWait     time.Duration
+	WSReadLimit    int64
 }
 
 // Register wires health, ready, and not-yet-implemented API routes.
@@ -45,8 +57,7 @@ func Register(r *gin.Engine, deps *Deps) {
 			grp.GET("/unread-count", stub501)
 		}
 	}
-	// WebSocket (upgrade) — 501 for now; real impl. em Fase 2
-	r.GET("/ws", stub501)
+	r.GET("/ws", handleWS(deps))
 }
 
 func readyHandler(deps *Deps) gin.HandlerFunc {

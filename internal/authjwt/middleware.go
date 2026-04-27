@@ -1,6 +1,8 @@
 package authjwt
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +17,9 @@ import (
 )
 
 const ctxCitizenID = "authCitizenID"
+
+// ErrUnauthorized signals invalid or expired JWT, invalid CPF claim, or wrong iss/aud.
+var ErrUnauthorized = errors.New("unauthorized")
 
 // CitizenID returns the authenticated citizen id from Gin context, if any.
 func CitizenID(c *gin.Context) *uuid.UUID {
@@ -34,10 +39,62 @@ type accessClaims struct {
 	PreferredUsername string `json:"preferred_username"`
 }
 
-// Middleware validates Bearer JWT (HS256), maps preferred_username to citizen fingerprint, loads citizen_id.
-func Middleware(pool *pgxpool.Pool, jwtSecret, cpfPepper, wantIssuer, wantAudience string) gin.HandlerFunc {
+// BearerFromRequest returns a JWT from Authorization: Bearer or ?access_token= (WebSocket / tooling).
+func BearerFromRequest(c *gin.Context) (raw string, ok bool) {
+	if t, ok := bearerToken(c.GetHeader("Authorization")); ok {
+		return t, true
+	}
+	q := strings.TrimSpace(c.Query("access_token"))
+	if q != "" {
+		return q, true
+	}
+	return "", false
+}
+
+// ResolveCitizenFromToken validates HS256 JWT and maps preferred_username to citizen_id.
+// Returns (nil, nil) when the token is valid but no citizen row exists yet.
+func ResolveCitizenFromToken(ctx context.Context, pool *pgxpool.Pool, jwtSecret, cpfPepper, wantIssuer, wantAudience, raw string) (*uuid.UUID, error) {
 	secret := []byte(jwtSecret)
 	pepper := []byte(cpfPepper)
+	var claims accessClaims
+	token, err := jwt.ParseWithClaims(raw, &claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return secret, nil
+	})
+	if err != nil || !token.Valid {
+		return nil, ErrUnauthorized
+	}
+	now := time.Now()
+	if claims.ExpiresAt == nil || !claims.ExpiresAt.After(now) {
+		return nil, ErrUnauthorized
+	}
+	if wantIssuer != "" && claims.Issuer != wantIssuer {
+		return nil, ErrUnauthorized
+	}
+	if wantAudience != "" {
+		okAud := false
+		for _, a := range claims.Audience {
+			if a == wantAudience {
+				okAud = true
+				break
+			}
+		}
+		if !okAud {
+			return nil, ErrUnauthorized
+		}
+	}
+	cpf, err := identity.NormalizeCPF11(claims.PreferredUsername)
+	if err != nil {
+		return nil, ErrUnauthorized
+	}
+	fp := identity.CitizenFingerprint(pepper, cpf)
+	return repo.LookupCitizenID(ctx, pool, fp)
+}
+
+// Middleware validates Bearer JWT (HS256), maps preferred_username to citizen fingerprint, loads citizen_id.
+func Middleware(pool *pgxpool.Pool, jwtSecret, cpfPepper, wantIssuer, wantAudience string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw, ok := bearerToken(c.GetHeader("Authorization"))
 		if !ok {
@@ -45,54 +102,13 @@ func Middleware(pool *pgxpool.Pool, jwtSecret, cpfPepper, wantIssuer, wantAudien
 			c.Abort()
 			return
 		}
-		var claims accessClaims
-		token, err := jwt.ParseWithClaims(raw, &claims, func(t *jwt.Token) (any, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, jwt.ErrSignatureInvalid
-			}
-			return secret, nil
-		})
-		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			c.Abort()
-			return
-		}
-		now := time.Now()
-		if claims.ExpiresAt == nil || !claims.ExpiresAt.After(now) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			c.Abort()
-			return
-		}
-		if wantIssuer != "" && claims.Issuer != wantIssuer {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			c.Abort()
-			return
-		}
-		if wantAudience != "" {
-			okAud := false
-			for _, a := range claims.Audience {
-				if a == wantAudience {
-					okAud = true
-					break
-				}
-			}
-			if !okAud {
+		citizenID, err := ResolveCitizenFromToken(c.Request.Context(), pool, jwtSecret, cpfPepper, wantIssuer, wantAudience, raw)
+		if err != nil {
+			if errors.Is(err, ErrUnauthorized) {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-				c.Abort()
-				return
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
 			}
-		}
-		cpf, err := identity.NormalizeCPF11(claims.PreferredUsername)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			c.Abort()
-			return
-		}
-		fp := identity.CitizenFingerprint(pepper, cpf)
-		ctx := c.Request.Context()
-		citizenID, err := repo.LookupCitizenID(ctx, pool, fp)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
 			c.Abort()
 			return
 		}

@@ -18,8 +18,10 @@ import (
 	"desafio-backend/internal/authjwt"
 	"desafio-backend/internal/db"
 	"desafio-backend/internal/identity"
+	migrator "desafio-backend/internal/migrate"
 	"desafio-backend/internal/rdb"
 	"desafio-backend/internal/webhook"
+	"desafio-backend/internal/wsbus"
 )
 
 func TestIntegration_notificationsJWT(t *testing.T) {
@@ -33,6 +35,9 @@ func TestIntegration_notificationsJWT(t *testing.T) {
 	const webhookSecret = "integration-webhook-secret-32-chars______"
 
 	ctx := context.Background()
+	if err := migrator.Up(ctx, databaseURL); err != nil {
+		t.Fatalf("migrations: %v", err)
+	}
 	pool, err := db.Connect(ctx, databaseURL)
 	if err != nil {
 		t.Fatalf("db: %v", err)
@@ -44,7 +49,7 @@ func TestIntegration_notificationsJWT(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = redisC.Close() })
 
-	_, err = pool.Exec(ctx, `TRUNCATE notifications, citizens CASCADE`)
+	_, err = pool.Exec(ctx, `TRUNCATE webhook_dlq, event_outbox, notifications, citizens CASCADE`)
 	if err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
@@ -85,7 +90,23 @@ func TestIntegration_notificationsJWT(t *testing.T) {
 	r := gin.New()
 	wh := webhook.NewService(pool, webhookSecret, cpfPepper)
 	auth := authjwt.Middleware(pool, jwtSecret, cpfPepper, "", "")
-	Register(r, &Deps{Pool: pool, Redis: redisC, Webhook: wh, AuthJWT: auth})
+	hub := wsbus.NewHub()
+	t.Cleanup(func() { hub.Close() })
+	Register(r, &Deps{
+		Pool:           pool,
+		Redis:          redisC,
+		Webhook:        wh,
+		AuthJWT:        auth,
+		Hub:            hub,
+		JWTSecret:      jwtSecret,
+		CPFPepper:      cpfPepper,
+		JWTIssuer:      "",
+		JWTAudience:    "",
+		WSWriteTimeout: 10 * time.Second,
+		WSPingInterval: 30 * time.Second,
+		WSPongWait:     60 * time.Second,
+		WSReadLimit:    1 << 20,
+	})
 
 	tokenA := mintJWT(t, jwtSecret, cpfA)
 	req := httptest.NewRequest(http.MethodGet, "/notifications?limit=10&offset=0", nil)

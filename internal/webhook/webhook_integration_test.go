@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"desafio-backend/internal/db"
+	migrator "desafio-backend/internal/migrate"
 )
 
 func TestIntegration_webhookIdempotent(t *testing.T) {
@@ -28,13 +29,16 @@ func TestIntegration_webhookIdempotent(t *testing.T) {
 	const cpfPepper = "integration-cpf-pepper-32-chars__________"
 
 	ctx := context.Background()
+	if err := migrator.Up(ctx, databaseURL); err != nil {
+		t.Fatalf("migrations: %v", err)
+	}
 	pool, err := db.Connect(ctx, databaseURL)
 	if err != nil {
 		t.Fatalf("db: %v", err)
 	}
 	t.Cleanup(pool.Close)
 
-	_, err = pool.Exec(ctx, `TRUNCATE notifications, citizens CASCADE`)
+	_, err = pool.Exec(ctx, `TRUNCATE webhook_dlq, event_outbox, notifications, citizens CASCADE`)
 	if err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
