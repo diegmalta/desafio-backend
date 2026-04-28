@@ -1,6 +1,6 @@
 # WebSocket — `/ws`
 
-O app mantém uma ligação WebSocket para receber notificações **assim que** um evento do webhook é persistido e publicado (via **outbox** + **Redis Pub/Sub** + hub in-memory no processo).
+O app mantém uma ligação WebSocket para receber notificações **assim que** um evento do webhook é persistido e publicado (via **outbox** + **Redis Pub/Sub** + hub in-memory no processo). Fluxo completo: [architecture.md](architecture.md). Implicações de segurança (incl. `Origin`): [security-privacy.md](security-privacy.md).
 
 ## Autenticação
 

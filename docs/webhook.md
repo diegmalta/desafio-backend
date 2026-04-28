@@ -100,11 +100,11 @@ Garante que o Postgres está acessível (ex.: `docker compose up -d postgres` ou
 ## Limitações conhecidas
 
 - O histórico de schema e a aplicação das alterações usam a tabela `schema_migrations` (golang-migrate), não o `initdb` do container.
-- Redis não participa nesta fatia do webhook (reservado para WebSocket/pub-sub mais tarde).
+- O Redis entra **depois** da transação: o worker lê `event_outbox`, publica em `notif:citizen:<uuid>` e o cliente WebSocket recebe via Pub/Sub (ver [architecture.md](architecture.md)).
 
 ## Postman
 
-Collection: [`postman/desafio-backend.postman_collection.json`](../postman/desafio-backend.postman_collection.json). Para `/notifications` é preciso JWT na variável `access_token` — ver [`notifications.md`](notifications.md).
+Se mantiveres uma collection local em `postman/`, essa pasta pode estar no `.gitignore`; gera ou importa pedidos alinhados a estes contratos. Para `/notifications` é preciso JWT — ver [`notifications.md`](notifications.md).
 
 ## Código relevante
 
