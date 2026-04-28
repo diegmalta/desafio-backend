@@ -76,7 +76,7 @@ export default function (data) {
 
   res = http.post(
     `${b}/devices`,
-    JSON.stringify({ token: `k6-token-${__VU}-${__ITER}`, platform: 'web_mock' }),
+    JSON.stringify({ token: `k6-token-${__VU}-${__ITER}`, platform: 'web' }),
     { headers: { ...authHdr, 'Content-Type': 'application/json' }, tags: { name: 'devices_register' } }
   );
   check(res, { 'devices 200': (r) => r.status === 200 });

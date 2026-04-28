@@ -22,6 +22,7 @@ import (
 	"desafio-backend/internal/notify"
 	"desafio-backend/internal/rdb"
 	"desafio-backend/internal/telemetry"
+	"desafio-backend/internal/upstream"
 	"desafio-backend/internal/webhook"
 	"desafio-backend/internal/wsbus"
 
@@ -80,7 +81,7 @@ func main() {
 		}()
 	}
 
-	pushClient := integrations.NewPushHTTPClient(cfg.PushMockURL, cfg.HTTPClientTimeout)
+	pushClient := integrations.NewPushHTTPClient(cfg.PushWebhookURL, cfg.HTTPClientTimeout)
 	chamadosClient := integrations.NewChamadosClient(cfg.ChamadosAPIBaseURL, cfg.HTTPClientTimeout)
 
 	worker := &notify.Worker{
@@ -100,6 +101,7 @@ func main() {
 	router := gin.New()
 	router.Use(otelgin.Middleware(cfg.OTELServiceName))
 	router.Use(gin.Recovery())
+	upstream.Register(router, cfg.InternalUpstreamStubs)
 	router.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
 	})

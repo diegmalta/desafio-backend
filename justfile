@@ -95,9 +95,5 @@ k6-api-extensions:
 k6-api-extensions-native:
     k6 run ./k6/api_extensions.js
 
-# Build da imagem do mock HTTP (chamados, mapas, push)
-integrations-mock-build:
-    docker build -f Dockerfile.integrations-mock -t desafio-integrations-mock "{{justfile_directory()}}"
-
 fmt:
     go fmt ./...

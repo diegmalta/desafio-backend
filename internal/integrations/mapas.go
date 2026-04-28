@@ -25,7 +25,7 @@ type MapasClient struct {
 	cancel      context.CancelFunc
 }
 
-// NewMapasClient baseURL is prefix without trailing slash, e.g. http://mock:8099/mapas . Empty returns nil.
+// NewMapasClient baseURL is prefix without trailing slash (…/mapas + /health). Empty returns nil.
 func NewMapasClient(baseURL string, httpTimeout time.Duration) *MapasClient {
 	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if base == "" {

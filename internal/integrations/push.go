@@ -15,14 +15,14 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-// PushHTTPClient sends push-like notifications to a mock or FCM-compatible HTTP endpoint.
+// PushHTTPClient POSTs JSON payloads to an optional HTTP endpoint (one request per device token).
 type PushHTTPClient struct {
 	url     string
 	httpc   *http.Client
 	breaker *gobreaker.CircuitBreaker
 }
 
-// NewPushHTTPClient posts JSON to pushURL (full URL, e.g. http://mock:8099/v1/push/send).
+// NewPushHTTPClient posts JSON to pushURL (full URL). Empty pushURL returns nil.
 func NewPushHTTPClient(pushURL string, httpTimeout time.Duration) *PushHTTPClient {
 	u := strings.TrimSpace(pushURL)
 	if u == "" {

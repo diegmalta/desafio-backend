@@ -31,11 +31,12 @@ func Load() Config {
 		OTELServiceName:    getDefault("OTEL_SERVICE_NAME", "desafio-backend"),
 		OTELTracesExporter: getDefault("OTEL_TRACES_EXPORTER", "stdout"),
 
-		ChamadosAPIBaseURL: getDefault("CHAMADOS_API_BASE_URL", ""),
-		MapasAPIBaseURL:    getDefault("MAPAS_API_BASE_URL", ""),
-		PushMockURL:        getDefault("PUSH_MOCK_URL", ""),
-		HTTPClientTimeout:  getDurationDefault("HTTP_CLIENT_TIMEOUT", 5*time.Second),
-		MapasPingInterval:  getDurationDefault("MAPAS_PING_INTERVAL", 20*time.Second),
+		ChamadosAPIBaseURL:    getDefault("CHAMADOS_API_BASE_URL", ""),
+		MapasAPIBaseURL:       getDefault("MAPAS_API_BASE_URL", ""),
+		PushWebhookURL:        getDefault("PUSH_WEBHOOK_URL", ""),
+		HTTPClientTimeout:     getDurationDefault("HTTP_CLIENT_TIMEOUT", 5*time.Second),
+		MapasPingInterval:     getDurationDefault("MAPAS_PING_INTERVAL", 20*time.Second),
+		InternalUpstreamStubs: getBoolDefault("INTERNAL_UPSTREAM_STUBS", false),
 	}
 }
 
@@ -64,9 +65,11 @@ type Config struct {
 
 	ChamadosAPIBaseURL string
 	MapasAPIBaseURL    string
-	PushMockURL        string
+	PushWebhookURL     string
 	HTTPClientTimeout  time.Duration
 	MapasPingInterval  time.Duration
+
+	InternalUpstreamStubs bool
 }
 
 func getDefault(key, def string) string {
@@ -101,4 +104,22 @@ func getDurationDefault(key string, def time.Duration) time.Duration {
 		}
 	}
 	return def
+}
+
+func getBoolDefault(key string, def bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	switch v {
+	case "1", "true", "TRUE", "yes", "YES", "on", "ON":
+		return true
+	case "0", "false", "FALSE", "no", "NO", "off", "OFF":
+		return false
+	default:
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+		return def
+	}
 }
