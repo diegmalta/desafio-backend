@@ -30,6 +30,12 @@ func Load() Config {
 
 		OTELServiceName:    getDefault("OTEL_SERVICE_NAME", "desafio-backend"),
 		OTELTracesExporter: getDefault("OTEL_TRACES_EXPORTER", "stdout"),
+
+		ChamadosAPIBaseURL: getDefault("CHAMADOS_API_BASE_URL", ""),
+		MapasAPIBaseURL:    getDefault("MAPAS_API_BASE_URL", ""),
+		PushMockURL:        getDefault("PUSH_MOCK_URL", ""),
+		HTTPClientTimeout:  getDurationDefault("HTTP_CLIENT_TIMEOUT", 5*time.Second),
+		MapasPingInterval:  getDurationDefault("MAPAS_PING_INTERVAL", 20*time.Second),
 	}
 }
 
@@ -55,6 +61,12 @@ type Config struct {
 
 	OTELServiceName    string
 	OTELTracesExporter string
+
+	ChamadosAPIBaseURL string
+	MapasAPIBaseURL    string
+	PushMockURL        string
+	HTTPClientTimeout  time.Duration
+	MapasPingInterval  time.Duration
 }
 
 func getDefault(key, def string) string {

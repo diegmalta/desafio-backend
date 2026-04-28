@@ -25,6 +25,13 @@ services:
       timeout: 3s
       retries: 5
 
+  integrations-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.integrations-mock
+    ports:
+      - "8099:8099"
+
   app:
     build: .
     env_file:
@@ -34,9 +41,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      integrations-mock:
+        condition: service_started
     environment:
       DATABASE_URL: postgres://notif:notif@postgres:5432/notif?sslmode=disable
       REDIS_ADDR: redis:6379
+      CHAMADOS_API_BASE_URL: http://integrations-mock:8099
+      MAPAS_API_BASE_URL: http://integrations-mock:8099/mapas
+      PUSH_MOCK_URL: http://integrations-mock:8099/v1/push/send
     ports:
       - "8080:8080"
 

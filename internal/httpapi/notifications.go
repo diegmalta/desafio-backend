@@ -1,6 +1,9 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -8,8 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sony/gobreaker"
 
 	"desafio-backend/internal/authjwt"
+	"desafio-backend/internal/integrations"
 	"desafio-backend/internal/repo"
 )
 
@@ -68,7 +73,7 @@ func handleUnreadCount(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-func handleMarkRead(pool *pgxpool.Pool) gin.HandlerFunc {
+func handleMarkRead(pool *pgxpool.Pool, chamados *integrations.ChamadosClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cid := authjwt.CitizenID(c)
 		if cid == nil {
@@ -81,7 +86,7 @@ func handleMarkRead(pool *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_id"})
 			return
 		}
-		ok, err := repo.MarkNotificationRead(c.Request.Context(), pool, *cid, nid)
+		ok, chamadoID, err := repo.MarkNotificationRead(c.Request.Context(), pool, *cid, nid)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
 			return
@@ -90,7 +95,78 @@ func handleMarkRead(pool *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
 			return
 		}
+		scheduleChamadosReadNotify(chamados, chamadoID, cid.String())
 		c.Status(http.StatusNoContent)
+	}
+}
+
+func scheduleChamadosReadNotify(ch *integrations.ChamadosClient, chamadoID, citizenRef string) {
+	if ch == nil || chamadoID == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		if err := ch.NotifyRead(ctx, chamadoID, citizenRef); err != nil {
+			if errors.Is(err, gobreaker.ErrOpenState) {
+				log.Printf("chamados NotifyRead: circuit open chamado_id=%s", chamadoID)
+				return
+			}
+			log.Printf("chamados NotifyRead: %v", chamadoID)
+		}
+	}()
+}
+
+func handleGetNotification(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cid := authjwt.CitizenID(c)
+		if cid == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		idStr := c.Param("id")
+		nid, err := uuid.Parse(idStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_id"})
+			return
+		}
+		row, err := repo.GetNotificationByCitizen(c.Request.Context(), pool, *cid, nid)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+			return
+		}
+		if row == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		c.JSON(http.StatusOK, rowToJSON(*row))
+	}
+}
+
+func handleMarkAllRead(pool *pgxpool.Pool, chamados *integrations.ChamadosClient) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cid := authjwt.CitizenID(c)
+		if cid == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		chamadosIDs, n, err := repo.MarkAllNotificationsRead(c.Request.Context(), pool, *cid)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+			return
+		}
+		seen := make(map[string]struct{})
+		for _, ch := range chamadosIDs {
+			if ch == "" {
+				continue
+			}
+			if _, ok := seen[ch]; ok {
+				continue
+			}
+			seen[ch] = struct{}{}
+			scheduleChamadosReadNotify(chamados, ch, cid.String())
+		}
+		c.JSON(http.StatusOK, gin.H{"updated": n})
 	}
 }
 

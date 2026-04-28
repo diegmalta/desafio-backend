@@ -88,6 +88,16 @@ k6-webhook-native:
 k6-notifications-native:
     k6 run ./k6/notifications-read.js
 
-# Formatação (opcional)
+# k6: novos endpoints (K6_JWT; WEBHOOK_SECRET opcional para seed CH-k6-ext). BASE_URL padrão host.docker.internal:8080
+k6-api-extensions:
+    docker run --rm -v "{{justfile_directory()}}:/src" -w /src -e K6_JWT -e WEBHOOK_SECRET -e K6_CPF -e "BASE_URL={{env_var_or_default('BASE_URL', 'http://host.docker.internal:8080')}}" grafana/k6:latest run ./k6/api_extensions.js
+
+k6-api-extensions-native:
+    k6 run ./k6/api_extensions.js
+
+# Build da imagem do mock HTTP (chamados, mapas, push)
+integrations-mock-build:
+    docker build -f Dockerfile.integrations-mock -t desafio-integrations-mock "{{justfile_directory()}}"
+
 fmt:
     go fmt ./...

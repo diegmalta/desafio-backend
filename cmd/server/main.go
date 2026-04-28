@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"desafio-backend/internal/config"
 	"desafio-backend/internal/db"
 	"desafio-backend/internal/httpapi"
+	"desafio-backend/internal/integrations"
 	migrator "desafio-backend/internal/migrate"
 	"desafio-backend/internal/notify"
 	"desafio-backend/internal/rdb"
@@ -66,9 +68,25 @@ func main() {
 	defer rootCancel()
 
 	hub := wsbus.NewHub()
+
+	var mapasClient *integrations.MapasClient
+	if strings.TrimSpace(cfg.MapasAPIBaseURL) != "" {
+		mapasClient = integrations.NewMapasClient(cfg.MapasAPIBaseURL, cfg.HTTPClientTimeout)
+		mapasClient.StartBackgroundPing(rootCtx, cfg.MapasPingInterval)
+		defer func() {
+			if mapasClient != nil {
+				mapasClient.Stop()
+			}
+		}()
+	}
+
+	pushClient := integrations.NewPushHTTPClient(cfg.PushMockURL, cfg.HTTPClientTimeout)
+	chamadosClient := integrations.NewChamadosClient(cfg.ChamadosAPIBaseURL, cfg.HTTPClientTimeout)
+
 	worker := &notify.Worker{
 		Pool:         pgPool,
 		Redis:        redisC.Inner,
+		Push:         pushClient,
 		BatchSize:    cfg.OutboxBatchSize,
 		PollInterval: cfg.OutboxPollInterval,
 		MaxAttempts:  cfg.OutboxMaxAttempts,
@@ -101,6 +119,8 @@ func main() {
 		WSPingInterval: cfg.WSPingInterval,
 		WSPongWait:     cfg.WSPongWait,
 		WSReadLimit:    cfg.WSReadLimit,
+		Chamados:       chamadosClient,
+		Mapas:          mapasClient,
 	})
 
 	srv := &http.Server{

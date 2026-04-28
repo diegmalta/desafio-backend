@@ -2,12 +2,15 @@ package notify
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"desafio-backend/internal/integrations"
 	"desafio-backend/internal/repo"
 )
 
@@ -15,6 +18,7 @@ import (
 type Worker struct {
 	Pool         *pgxpool.Pool
 	Redis        *redis.Client
+	Push         *integrations.PushHTTPClient
 	BatchSize    int
 	PollInterval time.Duration
 	MaxAttempts  int
@@ -51,6 +55,11 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 }
 
+type pushJob struct {
+	citizen uuid.UUID
+	raw     []byte
+}
+
 func (w *Worker) processBatch(ctx context.Context) error {
 	tx, err := w.Pool.Begin(ctx)
 	if err != nil {
@@ -66,6 +75,8 @@ func (w *Worker) processBatch(ctx context.Context) error {
 		return tx.Commit(ctx)
 	}
 
+	var pushJobs []pushJob
+
 	for _, row := range rows {
 		ch := CitizenChannel(row.CitizenID)
 		pubErr := w.Redis.Publish(ctx, ch, string(row.Payload)).Err()
@@ -73,6 +84,7 @@ func (w *Worker) processBatch(ctx context.Context) error {
 			if err := repo.MarkOutboxSent(ctx, tx, row.ID); err != nil {
 				return err
 			}
+			pushJobs = append(pushJobs, pushJob{citizen: row.CitizenID, raw: row.Payload})
 			continue
 		}
 		newAttempts := row.Attempts + 1
@@ -85,7 +97,41 @@ func (w *Worker) processBatch(ctx context.Context) error {
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	for _, job := range pushJobs {
+		w.sendPushNotifications(ctx, job.citizen, job.raw)
+	}
+	return nil
+}
+
+type wsPayload struct {
+	Title string `json:"title"`
+	Body  string `json:"body"`
+}
+
+func (w *Worker) sendPushNotifications(ctx context.Context, citizenID uuid.UUID, raw []byte) {
+	if w.Push == nil {
+		return
+	}
+	var pl wsPayload
+	if err := json.Unmarshal(raw, &pl); err != nil {
+		log.Printf("push: decode payload: %v", err)
+		return
+	}
+	tokens, err := repo.ListPushTokensByCitizen(ctx, w.Pool, citizenID)
+	if err != nil {
+		log.Printf("push: list tokens: %v", err)
+		return
+	}
+	pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	for _, t := range tokens {
+		if err := w.Push.Send(pctx, t, pl.Title, pl.Body); err != nil {
+			log.Printf("push: send: %v", err)
+		}
+	}
 }
 
 func (w *Worker) nextBackoff(newAttempts int) time.Duration {
