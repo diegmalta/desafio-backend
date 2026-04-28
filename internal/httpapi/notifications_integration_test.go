@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"desafio-backend/internal/authjwt"
 	"desafio-backend/internal/db"
 	"desafio-backend/internal/identity"
+	"desafio-backend/internal/integrations"
 	migrator "desafio-backend/internal/migrate"
 	"desafio-backend/internal/rdb"
 	"desafio-backend/internal/webhook"
@@ -49,7 +51,7 @@ func TestIntegration_notificationsJWT(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = redisC.Close() })
 
-	_, err = pool.Exec(ctx, `TRUNCATE webhook_dlq, event_outbox, notifications, citizens CASCADE`)
+	_, err = pool.Exec(ctx, `TRUNCATE webhook_dlq, event_outbox, notifications, push_devices, citizens CASCADE`)
 	if err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
@@ -86,6 +88,19 @@ func TestIntegration_notificationsJWT(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	mockChamados := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/v1/chamados/") && strings.HasSuffix(r.URL.Path, "/summary") {
+			_ = json.NewEncoder(w).Encode(map[string]string{"stub": "chamados"})
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/callbacks/citizen-read" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(mockChamados.Close)
+
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	wh := webhook.NewService(pool, webhookSecret, cpfPepper)
@@ -106,6 +121,7 @@ func TestIntegration_notificationsJWT(t *testing.T) {
 		WSPingInterval: 30 * time.Second,
 		WSPongWait:     60 * time.Second,
 		WSReadLimit:    1 << 20,
+		Chamados:       integrations.NewChamadosClient(mockChamados.URL, 5*time.Second),
 	})
 
 	tokenA := mintJWT(t, jwtSecret, cpfA)
@@ -135,6 +151,30 @@ func TestIntegration_notificationsJWT(t *testing.T) {
 	r.ServeHTTP(w3, reqPatch2)
 	if w3.Code != http.StatusNoContent {
 		t.Fatalf("citizen B patch own: want 204 got %d %s", w3.Code, w3.Body.String())
+	}
+
+	reqGetOne := httptest.NewRequest(http.MethodGet, "/notifications/"+notifA.String(), nil)
+	reqGetOne.Header.Set("Authorization", "Bearer "+tokenA)
+	w4 := httptest.NewRecorder()
+	r.ServeHTTP(w4, reqGetOne)
+	if w4.Code != http.StatusOK || !strings.Contains(w4.Body.String(), "CH-A") {
+		t.Fatalf("get one: %d %s", w4.Code, w4.Body.String())
+	}
+
+	reqMe := httptest.NewRequest(http.MethodGet, "/citizens/me", nil)
+	reqMe.Header.Set("Authorization", "Bearer "+tokenA)
+	w5 := httptest.NewRecorder()
+	r.ServeHTTP(w5, reqMe)
+	if w5.Code != http.StatusOK || !strings.Contains(w5.Body.String(), idA.String()) {
+		t.Fatalf("citizens me: %d %s", w5.Code, w5.Body.String())
+	}
+
+	reqSum := httptest.NewRequest(http.MethodGet, "/chamados/CH-A/summary", nil)
+	reqSum.Header.Set("Authorization", "Bearer "+tokenA)
+	w6 := httptest.NewRecorder()
+	r.ServeHTTP(w6, reqSum)
+	if w6.Code != http.StatusOK {
+		t.Fatalf("chamados summary: %d %s", w6.Code, w6.Body.String())
 	}
 }
 

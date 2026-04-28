@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"desafio-backend/internal/authjwt"
+	"desafio-backend/internal/integrations"
 	"desafio-backend/internal/rdb"
 	"desafio-backend/internal/webhook"
 	"desafio-backend/internal/wsbus"
@@ -29,6 +31,9 @@ type Deps struct {
 	WSPingInterval time.Duration
 	WSPongWait     time.Duration
 	WSReadLimit    int64
+
+	Chamados *integrations.ChamadosClient
+	Mapas    *integrations.MapasClient
 }
 
 // Register wires health, ready, and not-yet-implemented API routes.
@@ -44,18 +49,47 @@ func Register(r *gin.Engine, deps *Deps) {
 		r.POST("/webhook", stub501)
 	}
 	if deps != nil && deps.Pool != nil && deps.AuthJWT != nil {
-		grp := r.Group("/notifications")
-		grp.Use(deps.AuthJWT)
-		grp.GET("", handleListNotifications(deps.Pool))
-		grp.PATCH("/:id/read", handleMarkRead(deps.Pool))
-		grp.GET("/unread-count", handleUnreadCount(deps.Pool))
+		touch := authjwt.TouchLastSeenMiddleware(deps.Pool)
+		auth := deps.AuthJWT
+
+		ngrp := r.Group("/notifications")
+		ngrp.Use(auth, touch)
+		ngrp.GET("/unread-count", handleUnreadCount(deps.Pool))
+		ngrp.PATCH("/read-all", handleMarkAllRead(deps.Pool, deps.Chamados))
+		ngrp.GET("/:id", handleGetNotification(deps.Pool))
+		ngrp.GET("", handleListNotifications(deps.Pool))
+		ngrp.PATCH("/:id/read", handleMarkRead(deps.Pool, deps.Chamados))
+
+		cg := r.Group("/citizens")
+		cg.Use(auth, touch)
+		cg.GET("/me", handleCitizenMe(deps.Pool))
+
+		dg := r.Group("/devices")
+		dg.Use(auth, touch)
+		dg.POST("", handleRegisterDevice(deps.Pool))
+		dg.DELETE("", handleDeleteDevice(deps.Pool))
+
+		chgrp := r.Group("/chamados")
+		chgrp.Use(auth, touch)
+		chgrp.GET("/:chamado_id/summary", handleChamadosSummary(deps.Pool, deps.Chamados))
+
+		mgrp := r.Group("/mapas")
+		mgrp.Use(auth, touch)
+		mgrp.GET("/status", handleMapasStatus(deps.Mapas))
 	} else {
 		grp := r.Group("/notifications")
 		{
 			grp.GET("", stub501)
 			grp.PATCH("/:id/read", stub501)
 			grp.GET("/unread-count", stub501)
+			grp.PATCH("/read-all", stub501)
+			grp.GET("/:id", stub501)
 		}
+		r.Group("/citizens").GET("/me", stub501)
+		r.Group("/devices").POST("", stub501)
+		r.Group("/devices").DELETE("", stub501)
+		r.Group("/chamados").GET("/:chamado_id/summary", stub501)
+		r.Group("/mapas").GET("/status", stub501)
 	}
 	r.GET("/ws", handleWS(deps))
 }

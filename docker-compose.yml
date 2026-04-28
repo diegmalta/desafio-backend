@@ -1,3 +1,9 @@
+# Rede nomeada explícita: evita falhas de DNS tipo "lookup postgres: no such host"
+# no container `app` (Docker Desktop / alguns ambientes).
+networks:
+  backend:
+    driver: bridge
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -14,6 +20,8 @@ services:
       retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
 
   redis:
     image: redis:7-alpine
@@ -24,6 +32,8 @@ services:
       interval: 3s
       timeout: 3s
       retries: 5
+    networks:
+      - backend
 
   app:
     build: .
@@ -39,6 +49,8 @@ services:
       REDIS_ADDR: redis:6379
     ports:
       - "8080:8080"
+    networks:
+      - backend
 
 volumes:
   pgdata:

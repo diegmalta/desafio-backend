@@ -4,7 +4,7 @@ Serviço de notificações em tempo real para cidadãos acompanharem o estado do
 
 O sistema externo da prefeitura envia eventos (webhook com assinatura HMAC), a API expõe listagem e leitura de notificações ao cidadão autenticado (JWT) e liga o cliente por WebSocket para entrega imediata.
 
-**Esta versão** inclui **`POST /webhook`** (HMAC, idempotência, fingerprint, persistência, **outbox** + **DLQ** em falha de persistência), **REST `/notifications`** com **JWT** (`preferred_username` = CPF) e **WebSocket `/ws`** com broadcast via **Redis Pub/Sub** (`notif:citizen:<uuid>`) e hub in-memory por processo.
+**Esta versão** inclui **`POST /webhook`** (HMAC, idempotência, fingerprint, persistência, **outbox** + **DLQ** em falha de persistência), **REST `/notifications`** (lista, detalhe `GET /notifications/:id`, `PATCH /notifications/read-all`, contagens) e **`GET /citizens/me`**, **`POST/DELETE /devices`** (tokens para entrega HTTP opcional), **`GET /chamados/:id/summary`** (proxy opcional a um sistema de chamados), **`GET /mapas/status`**, integração **JWT** (`preferred_username` = CPF) e **WebSocket `/ws`** com broadcast via **Redis Pub/Sub** (`notif:citizen:<uuid>`) e hub in-memory por processo. Marcar notificações como lidas **persiste em PostgreSQL**; chamadas HTTP para sistemas externos são **opcionais** (`CHAMADOS_API_BASE_URL`, `MAPAS_API_BASE_URL`, `PUSH_WEBHOOK_URL`).
 
 - Webhook: [`docs/webhook.md`](docs/webhook.md)
 - Notificações: [`docs/notifications.md`](docs/notifications.md)
@@ -32,15 +32,19 @@ Copia [`.env.example`](.env.example) para `.env` e ajusta. Variáveis principais
 - `JWT_ISS` / `JWT_AUD` — opcionais; se definidos, o token tem de conter `iss` / `aud` compatíveis
 - Opcionais (defaults seguros): `OUTBOX_BATCH_SIZE`, `OUTBOX_POLL_INTERVAL`, `OUTBOX_MAX_ATTEMPTS`, `OUTBOX_BACKOFF_BASE`, `WS_WRITE_TIMEOUT`, `WS_PING_INTERVAL`, `WS_PONG_WAIT`, `WS_READ_LIMIT`
 - Tracing: `OTEL_SERVICE_NAME` (default `desafio-backend`), `OTEL_TRACES_EXPORTER` (`stdout` ou `none` para desativar exportação)
+- Integrações HTTP opcionais: `CHAMADOS_API_BASE_URL`, `MAPAS_API_BASE_URL`, `PUSH_WEBHOOK_URL`, `HTTP_CLIENT_TIMEOUT`, `MAPAS_PING_INTERVAL` (ping a `{MAPAS_API_BASE_URL}/health` quando mapas está configurado; circuit breaker nos clientes HTTP)
+- `INTERNAL_UPSTREAM_STUBS` — `1` ou `true` regista rotas `/_upstream/...` no mesmo processo (respostas JSON embebidas; **sem** Bearer). Para forçar falhas e testar circuit breaker: `?fail=1` nos GET de stub ou cabeçalho `X-Simulate-Fail: 1` nos POST de stub
 
 ## Como subir
 
-**Com Docker (recomendado):** sobe a API, Postgres e Redis. O serviço **`app` lê o ficheiro `.env`** na raiz do projeto (`env_file`). Tens de ter um `.env` (por exemplo copiado de `.env.example`). Os valores **`DATABASE_URL` e `REDIS_ADDR` dentro do container** são definidos pelo `docker-compose.yml` para apontar aos serviços `postgres` e `redis` (os do `.env` com `localhost` servem para `go run` na máquina anfitriã). O arranque do `app` aplica o schema com **[golang-migrate](https://github.com/golang-migrate/migrate)** a partir dos ficheiros em `migrations/` (incluídos no binário via `go:embed`).
+**Com Docker (recomendado):** sobe a **API**, **Postgres** e **Redis**. O serviço **`app` lê o ficheiro `.env`** (`env_file`). O `docker-compose.yml` **só** força **`DATABASE_URL`** e **`REDIS_ADDR`** para os serviços `postgres` e `redis` no contentor; **não** sobrescreve `CHAMADOS_API_BASE_URL`, `MAPAS_API_BASE_URL`, `PUSH_WEBHOOK_URL` nem `INTERNAL_UPSTREAM_STUBS` — isso vem **só** do teu `.env` (ex.: loopback `http://127.0.0.1:8080/_upstream` com stubs, ou URLs reais). O arranque do `app` aplica o schema com **[golang-migrate](https://github.com/golang-migrate/migrate)** a partir dos ficheiros em `migrations/` (incluídos no binário via `go:embed`).
 
 ```bash
 just up
 # ou: docker compose up --build
 ```
+
+Se o `app` falhar com **`lookup postgres ... no such host`** (DNS interno do Docker), os serviços partilham a rede **`backend`** no `docker-compose.yml`. Recria tudo: `docker compose down && docker compose up --build` (ou `docker compose up --force-recreate`).
 
 Para correr as migrações **sem** subir o servidor: `go run ./cmd/migrate -up` (ou `just migrate-up`). Bases vazias são preenchidas; para uma base com schema de um fluxo antigo (só `docker-entrypoint-initdb.d`) e sem tabela `schema_migrations`, usa `docker compose down -v` ou ajusta a versão com a CLI [`migrate force`](https://github.com/golang-migrate/migrate/blob/master/GETTING_STARTED.md#forcing-your-database-version).
 
@@ -106,8 +110,9 @@ Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GE
 | `just test-integration` | `go test -tags=integration ./...` (requer `DATABASE_URL`, `REDIS_ADDR`; as migrações correm no início se `DATABASE_URL` estiver definida) |
 | `just k6-webhook` | Carga no webhook via **Docker** (`grafana/k6`) — exige `WEBHOOK_SECRET` no ambiente; `BASE_URL` opcional (padrão `http://host.docker.internal:8080` para alcançar a API no anfitrião) |
 | `just k6-notifications` | Carga em `GET /notifications` via Docker — exige `K6_JWT`; `BASE_URL` opcional (mesmo padrão) |
+| `just k6-api-extensions` | Carga nos novos endpoints (`citizens/me`, `read-all`, `chamados`, `mapas/status`, `devices`) — exige `K6_JWT`; `WEBHOOK_SECRET` opcional (seed no setup); `BASE_URL` como nos outros |
 | `just k6-webhook-native` / `just k6-notifications-native` | Igual, mas com o binário `k6` no PATH (`BASE_URL` padrão `http://localhost:8080` nos scripts) |
-
+| `just k6-api-extensions-native` | Variante nativa de `k6-api-extensions` |
 ## Testes de carga (k6)
 
 Usa apenas em **ambiente local** ou staging; não apontar para produção sem acordo.
@@ -117,7 +122,7 @@ Usa apenas em **ambiente local** ou staging; não apontar para produção sem ac
 3. **REST:** gera um JWT (ver [docs/notifications.md](docs/notifications.md)). `$env:K6_JWT = '<token>'; just k6-notifications`.
 4. Se tiveres o binário **k6** instalado e quiseres falar com `http://localhost:8080` sem Docker, usa `just k6-webhook-native` / `just k6-notifications-native` com as mesmas variáveis.
 
-Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notifications-read.js`](k6/notifications-read.js). Carga em **WebSocket** fica fora deste diferencial (extensões k6 ou testes de integração Go).
+Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js), [`k6/notifications-read.js`](k6/notifications-read.js) e [`k6/api_extensions.js`](k6/api_extensions.js). Carga em **WebSocket** fica fora deste diferencial (extensões k6 ou testes de integração Go).
 
 ## Verificação completa (local / CI)
 
@@ -128,8 +133,8 @@ Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notificat
 
 ## Fase de implementação
 
-- **Feito:** webhook (com `webhook_dlq` em falha de persistência após HMAC válido), outbox transacional + worker + Redis Pub/Sub, WebSocket `/ws`, REST com JWT, migrations (golang-migrate), testes de integração opcionais, testes de carga k6, manifests Kubernetes em `k8s/`, tracing OpenTelemetry (Gin + exportador stdout)
-- **Seguinte (exemplos):** circuit breaker, exportador OTLP
+- **Feito:** webhook (com `webhook_dlq` em falha de persistência após HMAC válido), outbox transacional + worker + Redis Pub/Sub, entrega HTTP opcional por dispositivo (`PUSH_WEBHOOK_URL`), WebSocket `/ws`, REST com JWT (detalhe, read-all, citizens/me, devices, chamados summary e mapas status com clientes HTTP opcionais e circuit breaker), migrations, testes de integração opcionais, k6 (incl. `api_extensions`), manifests `k8s/`, tracing OpenTelemetry (Gin + `otelhttp` nos clientes externos)
+- **Seguinte (exemplos):** exportador OTLP, contratos adicionais com fornecedores de push
 
 ## Estrutura (resumo)
 
@@ -149,6 +154,8 @@ Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js) e [`k6/notificat
 - CPF nunca em texto no banco; JWT usa o mesmo fingerprint que o webhook
 - `just test-integration` para Postgres + Redis reais
 - Outbox na mesma transacção que `INSERT` da notificação; worker publica em Redis com retry e estado `dead`; `webhook_dlq` grava corpo bruto e assinatura quando a persistência falha após HMAC válido
+- Clientes HTTP opcionais (`CHAMADOS_API_BASE_URL`, `MAPAS_API_BASE_URL`, `PUSH_WEBHOOK_URL`): ausentes = sem chamadas externas; marcar lidas e listagens dependem só de PostgreSQL
+- Com `INTERNAL_UPSTREAM_STUBS=1`, o binário expõe `/_upstream/...` alinhado a esses clientes (fixtures em [`internal/upstream/fixtures/`](internal/upstream/fixtures/))
 - k6: HMAC do corpo UTF-8 enviado no POST (alinhado a [`docs/webhook.md`](docs/webhook.md)); cenários com rampa de VUs e limiar de `http_req_failed`
 - K8s offline: `just k8s-validate` com kubeconform evita depender de RBAC no `kubectl apply --dry-run=client`
 

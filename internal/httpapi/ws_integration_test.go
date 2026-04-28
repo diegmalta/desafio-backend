@@ -105,7 +105,7 @@ func TestIntegration_wsWebhookBroadcast(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = redisC.Close() })
 
-	_, err = pool.Exec(ctx, `TRUNCATE webhook_dlq, event_outbox, notifications, citizens CASCADE`)
+	_, err = pool.Exec(ctx, `TRUNCATE webhook_dlq, event_outbox, notifications, push_devices, citizens CASCADE`)
 	if err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
