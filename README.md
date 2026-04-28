@@ -6,6 +6,7 @@ O sistema externo da prefeitura envia eventos (webhook com assinatura HMAC), a A
 
 **Esta versão** inclui **`POST /webhook`** (HMAC, idempotência, fingerprint, persistência, **outbox** + **DLQ** em falha de persistência), **REST `/notifications`** (lista, detalhe `GET /notifications/:id`, `PATCH /notifications/read-all`, contagens) e **`GET /citizens/me`**, **`POST/DELETE /devices`** (tokens para entrega HTTP opcional), **`GET /chamados/:id/summary`** (proxy opcional a um sistema de chamados), **`GET /mapas/status`**, integração **JWT** (`preferred_username` = CPF) e **WebSocket `/ws`** com broadcast via **Redis Pub/Sub** (`notif:citizen:<uuid>`) e hub in-memory por processo. Marcar notificações como lidas **persiste em PostgreSQL**; chamadas HTTP para sistemas externos são **opcionais** (`CHAMADOS_API_BASE_URL`, `MAPAS_API_BASE_URL`, `PUSH_WEBHOOK_URL`).
 
+- **Índice da documentação:** [`docs/README.md`](docs/README.md) (arquitetura, segurança, testes, k6, Kubernetes, mapa REST)
 - Webhook: [`docs/webhook.md`](docs/webhook.md)
 - Notificações: [`docs/notifications.md`](docs/notifications.md)
 - WebSocket: [`docs/websocket.md`](docs/websocket.md)

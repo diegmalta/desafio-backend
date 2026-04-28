@@ -1,5 +1,7 @@
 # API REST — notificações (`/notifications`)
 
+Índice geral da documentação: [`docs/README.md`](README.md). Outras rotas autenticadas: [`rest-api.md`](rest-api.md).
+
 Endpoints protegidos por **JWT** (HS256). O CPF do cidadão vem na claim **`preferred_username`** (string com **11 dígitos**, sem formatação), alinhado ao enunciado do desafio.
 
 O fingerprint do cidadão é o mesmo que no webhook: `HMAC-SHA256(CPF_PEPPER, preferred_username)` — ver [`internal/identity/fingerprint.go`](../internal/identity/fingerprint.go).
@@ -68,6 +70,14 @@ Marca a notificação como lida se pertencer ao cidadão autenticado e ainda nã
 ### `GET /notifications/unread-count`
 
 Resposta **200**: `{"count": N}` com número de notificações com `read_at` nulo.
+
+### `GET /notifications/:id`
+
+Detalhe de uma notificação. O `:id` é o UUID da linha em `notifications`, **não** o `chamado_id`. **404** se o id não existir, não for UUID, pertencer a outro cidadão, ou o contexto de autenticação não tiver `citizen_id` resolvido.
+
+### `PATCH /notifications/read-all`
+
+Marca todas as notificações não lidas do cidadão como lidas. Resposta **200**: `{"updated": n}`. Pode disparar chamadas assíncronas ao sistema de chamados quando configurado.
 
 ## Gerar JWT de teste (HS256)
 
