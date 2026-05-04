@@ -27,7 +27,7 @@ Copia [`.env.example`](.env.example) para `.env` e ajusta. Variáveis principais
 - `HTTP_ADDR` — endereço de escuta (ex. `:8080`)
 - `DATABASE_URL` — PostgreSQL
 - `REDIS_ADDR` — endereço do Redis (ex. `localhost:6379`)
-- `WEBHOOK_SECRET` — segredo HMAC do corpo bruto do webhook (**obrigatório** no arranque)
+- `WEBHOOK_SECRET` — segredo HMAC do corpo bruto do webhook (**obrigatório** na inicialização)
 - `CPF_PEPPER` — segredo para derivar `citizens.fingerprint` a partir do CPF (**obrigatório**; distinto do webhook)
 - `JWT_SECRET` — segredo HS256 para validar JWT da API de notificações (**obrigatório**)
 - `JWT_ISS` / `JWT_AUD` — opcionais; se definidos, o token tem de conter `iss` / `aud` compatíveis
@@ -38,16 +38,16 @@ Copia [`.env.example`](.env.example) para `.env` e ajusta. Variáveis principais
 
 ## Como subir
 
-**Com Docker (recomendado):** sobe a **API**, **Postgres** e **Redis**. O serviço **`app` lê o ficheiro `.env`** (`env_file`). O `docker-compose.yml` **só** força **`DATABASE_URL`** e **`REDIS_ADDR`** para os serviços `postgres` e `redis` no contentor; **não** sobrescreve `CHAMADOS_API_BASE_URL`, `MAPAS_API_BASE_URL`, `PUSH_WEBHOOK_URL` nem `INTERNAL_UPSTREAM_STUBS` — isso vem **só** do teu `.env` (ex.: loopback `http://127.0.0.1:8080/_upstream` com stubs, ou URLs reais). O arranque do `app` aplica o schema com **[golang-migrate](https://github.com/golang-migrate/migrate)** a partir dos ficheiros em `migrations/` (incluídos no binário via `go:embed`).
+**Com Docker (recomendado):** sobe a **API**, **Postgres** e **Redis**. O serviço **`app` lê o arquivo `.env`** (`env_file`). O `docker-compose.yml` **só** força **`DATABASE_URL`** e **`REDIS_ADDR`** para os serviços `postgres` e `redis` no container; **não** sobrescreve `CHAMADOS_API_BASE_URL`, `MAPAS_API_BASE_URL`, `PUSH_WEBHOOK_URL` nem `INTERNAL_UPSTREAM_STUBS` — isso vem **só** do teu `.env` (ex.: loopback `http://127.0.0.1:8080/_upstream` com stubs, ou URLs reais). A inicialização do `app` aplica o schema com **[golang-migrate](https://github.com/golang-migrate/migrate)** a partir dos arquivos em `migrations/` (incluídos no binário via `go:embed`).
 
 ```bash
 just up
 # ou: docker compose up --build
 ```
 
-Se o `app` falhar com **`lookup postgres ... no such host`** (DNS interno do Docker), os serviços partilham a rede **`backend`** no `docker-compose.yml`. Recria tudo: `docker compose down && docker compose up --build` (ou `docker compose up --force-recreate`).
+Se o `app` falhar com **`lookup postgres ... no such host`** (DNS interno do Docker), os serviços compartilham a rede **`backend`** no `docker-compose.yml`. Recria tudo: `docker compose down && docker compose up --build` (ou `docker compose up --force-recreate`).
 
-Para correr as migrações **sem** subir o servidor: `go run ./cmd/migrate -up` (ou `just migrate-up`). Bases vazias são preenchidas; para uma base com schema de um fluxo antigo (só `docker-entrypoint-initdb.d`) e sem tabela `schema_migrations`, usa `docker compose down -v` ou ajusta a versão com a CLI [`migrate force`](https://github.com/golang-migrate/migrate/blob/master/GETTING_STARTED.md#forcing-your-database-version).
+Para subir as migrações **sem** subir o servidor: `go run ./cmd/migrate -up` (ou `just migrate-up`). Bases vazias são preenchidas; para uma base com schema de um fluxo antigo (só `docker-entrypoint-initdb.d`) e sem tabela `schema_migrations`, usa `docker compose down -v` ou ajusta a versão com a CLI [`migrate force`](https://github.com/golang-migrate/migrate/blob/master/GETTING_STARTED.md#forcing-your-database-version).
 
 - API: <http://localhost:8080>
 - `GET /health` — liveness
@@ -89,7 +89,7 @@ Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GE
 
 **Produção:** não versionar passwords ou segredos reais; preferir Secrets geridos fora do Git (External Secrets, Sealed Secrets, etc.). O Postgres no manifest usa **emptyDir** (dados perdem-se ao remover o pod); para dados persistentes, substituir por PVC ou StatefulSet e `storageClassName` adequado ao cluster.
 
-**Validar manifests sem cluster (recomendado em CI):** `just k8s-validate` — corre `kubectl kustomize` e [kubeconform](https://github.com/yannh/kubeconform) (`ghcr.io/yannh/kubeconform:v0.6.7`) em Docker sobre o YAML renderizado; **não** exige permissões no API server. Se tiveres contexto kubectl e quiseres simular `kubectl apply` no cliente (pode falhar por RBAC), usa `just k8s-apply-dry-run-client`; validação no servidor: `just k8s-validate-server`.
+**Validar manifests sem cluster (recomendado em CI):** `just k8s-validate` — execute `kubectl kustomize` e [kubeconform](https://github.com/yannh/kubeconform) (`ghcr.io/yannh/kubeconform:v0.6.7`) em Docker sobre o YAML renderizado; **não** exige permissões no API server. Se tiveres contexto kubectl e quiseres simular `kubectl apply` no cliente (pode falhar por RBAC), usa `just k8s-apply-dry-run-client`; validação no servidor: `just k8s-validate-server`.
 
 ## Comandos úteis (just)
 
@@ -108,7 +108,7 @@ Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GE
 | `just k8s-apply-dry-run-client` | `kubectl apply -k k8s/ --dry-run=client` (pode contactar o API server) |
 | `just k8s-validate-server` | `kubectl apply -k k8s/ --dry-run=server` (requer permissões no namespace) |
 | `just migrate-up` | `go run ./cmd/migrate -up` (aplica migrações; usa `DATABASE_URL` do ambiente) |
-| `just test-integration` | `go test -tags=integration ./...` (requer `DATABASE_URL`, `REDIS_ADDR`; as migrações correm no início se `DATABASE_URL` estiver definida) |
+| `just test-integration` | `go test -tags=integration ./...` (requer `DATABASE_URL`, `REDIS_ADDR`; as migrações rodam no início se `DATABASE_URL` estiver definida) |
 | `just k6-webhook` | Carga no webhook via **Docker** (`grafana/k6`) — exige `WEBHOOK_SECRET` no ambiente; `BASE_URL` opcional (padrão `http://host.docker.internal:8080` para alcançar a API no anfitrião) |
 | `just k6-notifications` | Carga em `GET /notifications` via Docker — exige `K6_JWT`; `BASE_URL` opcional (mesmo padrão) |
 | `just k6-api-extensions` | Carga nos novos endpoints (`citizens/me`, `read-all`, `chamados`, `mapas/status`, `devices`) — exige `K6_JWT`; `WEBHOOK_SECRET` opcional (seed no setup); `BASE_URL` como nos outros |
@@ -118,10 +118,10 @@ Abre <http://localhost:8080/health>. O `Deployment` da API usa **probes** em `GE
 
 Usa apenas em **ambiente local** ou staging; não apontar para produção sem acordo.
 
-1. Sobe a stack (`just up`) com a API acessível na porta publicada (ex.: 8080 no anfitrião).
-2. **Webhook:** no PowerShell, o mesmo segredo que no `.env` do servidor: `$env:WEBHOOK_SECRET = '…'; just k6-webhook`. O `just` usa **Docker** (`grafana/k6`); por padrão `BASE_URL` é `http://host.docker.internal:8080` para o contentor alcançar a API no Windows/macOS. Se a API estiver doutro host, define `$env:BASE_URL = 'http://…'`. Opcional: `K6_CPF` (11 dígitos; o script tem padrão `12345678901`).
+1. Sobe a stack (`just up`) com a API acessível na porta publicada (ex.: 8080 no host).
+2. **Webhook:** no PowerShell, o mesmo segredo que no `.env` do servidor: `$env:WEBHOOK_SECRET = '…'; just k6-webhook`. O `just` usa **Docker** (`grafana/k6`); por padrão `BASE_URL` é `http://host.docker.internal:8080` para o container alcançar a API no Windows/macOS. Se a API estiver de outro host, define `$env:BASE_URL = 'http://…'`. Opcional: `K6_CPF` (11 dígitos; o script tem padrão `12345678901`).
 3. **REST:** gera um JWT (ver [docs/notifications.md](docs/notifications.md)). `$env:K6_JWT = '<token>'; just k6-notifications`.
-4. Se tiveres o binário **k6** instalado e quiseres falar com `http://localhost:8080` sem Docker, usa `just k6-webhook-native` / `just k6-notifications-native` com as mesmas variáveis.
+4. Se tiver o binário **k6** instalado e quiser comunicar com `http://localhost:8080` sem Docker, usa `just k6-webhook-native` / `just k6-notifications-native` com as mesmas variáveis.
 
 Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js), [`k6/notifications-read.js`](k6/notifications-read.js) e [`k6/api_extensions.js`](k6/api_extensions.js). Carga em **WebSocket** fica fora deste diferencial (extensões k6 ou testes de integração Go).
 
@@ -140,7 +140,7 @@ Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js), [`k6/notificati
 ## Estrutura (resumo)
 
 - `cmd/server` — entrada do processo; `cmd/migrate` — CLI de migrações (opcional em dev)
-- `internal/migrate` — aplicação das migrações embebidas (também no arranque do servidor)
+- `internal/migrate` — aplicação das migrações embebidas (também no início do servidor)
 - `internal/config`, `internal/db`, `internal/rdb` — configuração e ligações
 - `internal/identity` — fingerprint do CPF (partilhado webhook + JWT)
 - `internal/authjwt` — middleware JWT
