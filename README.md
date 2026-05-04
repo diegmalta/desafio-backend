@@ -135,7 +135,7 @@ Os scripts estão em [`k6/webhook-load.js`](k6/webhook-load.js), [`k6/notificati
 ## Fase de implementação
 
 - **Feito:** webhook (com `webhook_dlq` em falha de persistência após HMAC válido), outbox transacional + worker + Redis Pub/Sub, entrega HTTP opcional por dispositivo (`PUSH_WEBHOOK_URL`), WebSocket `/ws`, REST com JWT (detalhe, read-all, citizens/me, devices, chamados summary e mapas status com clientes HTTP opcionais e circuit breaker), migrations, testes de integração opcionais, k6 (incl. `api_extensions`), manifests `k8s/`, tracing OpenTelemetry (Gin + `otelhttp` nos clientes externos)
-- **Seguinte (exemplos):** exportador OTLP, contratos adicionais com fornecedores de push
+- **O que faria com mais tempo:** exportador OTLP, contratos adicionais com fornecedores de push
 
 ## Estrutura (resumo)
 
